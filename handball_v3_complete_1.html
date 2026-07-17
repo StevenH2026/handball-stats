@@ -1341,9 +1341,22 @@
 
             if (isOnline) {
                 try {
-                    await window.sbClient.from('games').delete().eq('id', gameId);
+                    console.log('Deleting game from Supabase:', gameId);
+                    const { error } = await window.sbClient
+                        .from('games')
+                        .delete()
+                        .eq('id', gameId)
+                        .eq('user_id', currentUser.id);
+                    
+                    if (error) {
+                        console.error('Delete error:', error);
+                        showToast('⚠️ Fehler beim Cloud-Löschen');
+                    } else {
+                        console.log('Game deleted from Supabase');
+                    }
                 } catch (err) {
-                    console.error('Delete error:', err);
+                    console.error('Delete exception:', err);
+                    showToast('⚠️ Fehler beim Löschen');
                 }
             }
 
@@ -1354,7 +1367,7 @@
                 selectedPlayer = null;
             }
             renderAll();
-            showToast('Spiel gelöscht!');
+            showToast('✓ Spiel gelöscht!');
         }
 
         async function saveCurrentGame() {

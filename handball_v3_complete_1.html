@@ -662,14 +662,20 @@
 
             if (games.length > 0) {
                 container.innerHTML += '<div class="card"><div class="card-title">📋 Spiele (' + games.length + ')</div>' + 
-                    games.map(g => '<div class="card" onclick="selectGame(\'' + g.id + '\')" style="cursor: pointer; display: flex; justify-content: space-between; align-items: center; position: relative;">' +
-                    '<div><div class="card-title" style="margin: 0; font-size: 14px;">' + g.opponent + 
-                    (g.finished ? ' <span style="background: #639922; color: white; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 10px; margin-left: 0.5rem;">✓ BEENDET</span>' : '') + 
-                    '</div>' +
-                    '<div style="font-size: 11px; color: #999;">' + new Date(g.date).toLocaleDateString('de-DE') + '</div></div>' +
-                    '<div style="font-size: 24px; font-weight: 700; color: #185fa5;">' + g.ownGoals + ':' + g.opponentGoals + '</div>' +
-                    '<button class="btn btn-danger" style="padding: 0.5rem; min-height: auto;" onclick="event.stopPropagation(); deleteGame(\'' + g.id + '\');">Del</button>' +
-                    '</div>').join('') + '</div>';
+                    games.map(g => {
+                        const opponent = g.opponent || 'Unbekannt';
+                        const ownGoals = g.ownGoals !== undefined ? g.ownGoals : (g.own_goals || 0);
+                        const oppGoals = g.opponentGoals !== undefined ? g.opponentGoals : (g.opponent_goals || 0);
+                        
+                        return '<div class="card" onclick="selectGame(\'' + g.id + '\')" style="cursor: pointer; display: flex; justify-content: space-between; align-items: center; position: relative;">' +
+                        '<div><div class="card-title" style="margin: 0; font-size: 14px;">' + opponent + 
+                        (g.finished ? ' <span style="background: #639922; color: white; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 10px; margin-left: 0.5rem;">✓ BEENDET</span>' : '') + 
+                        '</div>' +
+                        '<div style="font-size: 11px; color: #999;">' + new Date(g.date).toLocaleDateString('de-DE') + '</div></div>' +
+                        '<div style="font-size: 24px; font-weight: 700; color: #185fa5;">' + ownGoals + ':' + oppGoals + '</div>' +
+                        '<button class="btn btn-danger" style="padding: 0.5rem; min-height: auto;" onclick="event.stopPropagation(); deleteGame(\'' + g.id + '\');">Del</button>' +
+                        '</div>';
+                    }).join('') + '</div>';
             } else {
                 container.innerHTML += '<div class="empty-state">Noch keine Spiele</div>';
             }
@@ -773,8 +779,86 @@
                     '</div>';
             }
 
-            html += '<div style="display: flex; gap: 1rem; margin-top: 2rem;"><button class="btn btn-success" onclick="saveCurrentGame(); showToast(\'Gespeichert!\');" style="flex: 1;">💾 Speichern</button><button class="btn btn-primary" onclick="exportToPDF();" style="flex: 1;">📄 PDF</button><button class="btn btn-warning" onclick="finishGame();" style="flex: 1;">🏁 Beenden</button></div>';
+            html += '<div style="display: flex; gap: 1rem; margin-top: 2rem; flex-wrap: wrap;"><button class="btn btn-success" onclick="saveCurrentGame(); showToast(\'Gespeichert!\');" style="flex: 1; min-width: 120px;">💾 Speichern</button><button class="btn btn-primary" onclick="exportToPDF();" style="flex: 1; min-width: 120px;">📄 PDF</button><button class="btn btn-warning" onclick="finishGame();" style="flex: 1; min-width: 120px;">🏁 Beenden</button><button class="btn btn-info" onclick="openAddPlayerModal();" style="flex: 1; min-width: 120px;">➕ Spieler hinzufügen</button></div>';
             container.innerHTML = html;
+        }
+
+        function openAddPlayerModal() {
+            if (!currentGame) {
+                showToast('Kein Spiel ausgewählt');
+                return;
+            }
+
+            // Spieler die NICHT im aktuellen Spiel sind
+            const usedPlayerIds = currentGame.players.map(p => p.id);
+            const availablePlayers = players.filter(p => !usedPlayerIds.includes(p.id));
+
+            if (availablePlayers.length === 0) {
+                showToast('Alle Spieler sind bereits im Spiel!');
+                return;
+            }
+
+            let html = '<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 0.5rem;">';
+            
+            availablePlayers.forEach(p => {
+                const isGK = p.is_goalkeeper || p.isGoalkeeper;
+                html += '<button class="player-btn" onclick="addPlayerToCurrentGame(\'' + p.id + '\'); closeAddPlayerModal();" style="background: ' + (isGK ? '#ffb366' : '#85c1e9') + ';"><strong>#' + p.number + '</strong><br>' + p.name.substring(0, 12) + '<br>' + (isGK ? '🥅' : '🏐') + '</button>';
+            });
+
+            html += '</div>';
+
+            const modal = document.getElementById('playerModal');
+            if (!modal) {
+                // Modal erstellen falls nicht vorhanden
+                const newModal = document.createElement('div');
+                newModal.id = 'playerModal';
+                newModal.className = 'modal';
+                newModal.style.display = 'flex';
+                newModal.innerHTML = '<div class="modal-content"><div class="modal-title">➕ Spieler hinzufügen</div><div id="playerModalContent"></div><div class="modal-buttons"><button class="btn btn-secondary" onclick="closeAddPlayerModal()">Abbrechen</button></div></div>';
+                document.body.appendChild(newModal);
+            }
+
+            document.getElementById('playerModalContent').innerHTML = html;
+            document.getElementById('playerModal').style.display = 'flex';
+        }
+
+        function closeAddPlayerModal() {
+            const modal = document.getElementById('playerModal');
+            if (modal) modal.style.display = 'none';
+        }
+
+        function addPlayerToCurrentGame(playerId) {
+            if (!currentGame) return;
+
+            const player = players.find(p => p.id === playerId);
+            if (!player) {
+                showToast('Spieler nicht gefunden');
+                return;
+            }
+
+            // Überprüfe ob Spieler bereits im Spiel ist
+            if (currentGame.players.find(p => p.id === playerId)) {
+                showToast('Spieler ist bereits im Spiel');
+                return;
+            }
+
+            // Füge Spieler zum Spiel hinzu
+            const isGK = player.is_goalkeeper || player.isGoalkeeper;
+            const newPlayer = {
+                id: player.id,
+                number: player.number,
+                name: player.name,
+                isGoalkeeper: isGK,
+                is_goalkeeper: isGK
+            };
+
+            // Initialisiere Stats
+            (isGK ? GK_STATS : FIELD_STATS).forEach(f => newPlayer[f] = 0);
+
+            currentGame.players.push(newPlayer);
+            saveCurrentGame();
+            renderStats();
+            showToast('✓ ' + player.name + ' hinzugefügt!');
         }
 
         function finishGame() {

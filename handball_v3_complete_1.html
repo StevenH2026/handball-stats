@@ -512,30 +512,57 @@
             renderAll();
         }
 
-        // Konvertiere Datenbank-Spalten (snake_case) zu App-Format (camelCase)
-        function convertGameFromDB(dbGame) {
-            if (!dbGame) return null;
-            return {
-                id: dbGame.id,
-                user_id: dbGame.user_id,
-                opponent: dbGame.opponent,
-                name: dbGame.name,
-                location: dbGame.location,
-                league: dbGame.league,
-                date: dbGame.date,
-                players: dbGame.players || [],
-                ownGoals: dbGame.own_goals || 0,
-                opponentGoals: dbGame.opponent_goals || 0,
-                startTime: dbGame.start_time,
-                totalPausedMs: dbGame.total_paused_ms || 0,
-                logs: dbGame.logs || [],
-                finished: dbGame.finished || false
-            };
-        }
-
         async function loadFromCloud() {
             try {
                 console.log('Loading from cloud for user:', currentUser.id);
+                
+                // Load players first
+                const { data: playersData, error: playersError } = await window.sbClient
+                    .from('players')
+                    .select('*')
+                    .eq('user_id', currentUser.id);
+
+                console.log('Players data:', playersData, playersError);
+
+                if (playersError) throw playersError;
+
+                if (!playersData || playersData.length === 0) {
+                    console.log('No players found, creating default players...');
+                    const newPlayers = [
+                        ...Array.from({ length: 25 }, (_, i) => ({ 
+                            id: 'p_' + currentUser.id.substring(0, 8) + '_' + (i+1), 
+                            number: i+1, 
+                            name: 'Spieler ' + (i+1), 
+                            is_goalkeeper: false, 
+                            user_id: currentUser.id 
+                        })),
+                        ...Array.from({ length: 4 }, (_, i) => ({ 
+                            id: 'gk_' + currentUser.id.substring(0, 8) + '_' + (i+1), 
+                            number: i+1, 
+                            name: 'TW ' + (i+1), 
+                            is_goalkeeper: true, 
+                            user_id: currentUser.id 
+                        }))
+                    ];
+                    
+                    const { error: insertError, data: insertedData } = await window.sbClient.from('players').insert(newPlayers);
+                    if (insertError) {
+                        console.error('Error inserting players:', insertError);
+                        throw insertError;
+                    }
+                    
+                    console.log('Players created:', insertedData);
+                    players = newPlayers;
+                } else {
+                    players = playersData;
+                }
+
+                console.log('Players loaded:', players.length);
+
+                // Save to IndexedDB
+                for (let player of players) {
+                    await saveToIDB('players', player);
+                }
                 
                 // Load games
                 const { data: gamesData, error: gamesError } = await window.sbClient

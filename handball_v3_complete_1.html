@@ -338,41 +338,109 @@
         // INDEXED DB
         // =====================================================
         function initIndexedDB() {
-            return new Promise((resolve) => {
-                const req = indexedDB.open(DB_NAME, 1);
-                req.onupgradeneeded = (e) => {
-                    const db = e.target.result;
-                    if (!db.objectStoreNames.contains('games')) db.createObjectStore('games', { keyPath: 'id' });
-                    if (!db.objectStoreNames.contains('players')) db.createObjectStore('players', { keyPath: 'id' });
-                };
-                req.onsuccess = () => {
-                    db = req.result;
-                    resolve();
-                };
+            return new Promise((resolve, reject) => {
+                try {
+                    const req = indexedDB.open(DB_NAME, 1);
+                    
+                    req.onerror = () => {
+                        console.error('IndexedDB open error:', req.error);
+                        reject(req.error);
+                    };
+                    
+                    req.onupgradeneeded = (e) => {
+                        const database = e.target.result;
+                        console.log('IndexedDB upgrade needed');
+                        if (!database.objectStoreNames.contains('games')) {
+                            database.createObjectStore('games', { keyPath: 'id' });
+                            console.log('Created games store');
+                        }
+                        if (!database.objectStoreNames.contains('players')) {
+                            database.createObjectStore('players', { keyPath: 'id' });
+                            console.log('Created players store');
+                        }
+                    };
+                    
+                    req.onsuccess = () => {
+                        db = req.result;
+                        console.log('IndexedDB initialized successfully');
+                        resolve();
+                    };
+                } catch (err) {
+                    console.error('IndexedDB initialization exception:', err);
+                    reject(err);
+                }
             });
         }
 
         function saveToIDB(storeName, data) {
-            return new Promise((resolve) => {
-                const tx = db.transaction([storeName], 'readwrite');
-                tx.objectStore(storeName).put(data);
-                tx.oncomplete = resolve;
+            return new Promise((resolve, reject) => {
+                if (!db) {
+                    console.warn('DB not initialized, attempting retry...');
+                    setTimeout(() => saveToIDB(storeName, data).then(resolve).catch(reject), 500);
+                    return;
+                }
+                
+                try {
+                    const tx = db.transaction([storeName], 'readwrite');
+                    tx.objectStore(storeName).put(data);
+                    tx.oncomplete = () => {
+                        console.log('Saved to IDB:', storeName);
+                        resolve();
+                    };
+                    tx.onerror = () => {
+                        console.error('IDB transaction error:', tx.error);
+                        reject(tx.error);
+                    };
+                } catch (err) {
+                    console.error('saveToIDB exception:', err);
+                    reject(err);
+                }
             });
         }
 
         function getAllFromIDB(storeName) {
-            return new Promise((resolve) => {
-                const tx = db.transaction([storeName], 'readonly');
-                const req = tx.objectStore(storeName).getAll();
-                req.onsuccess = () => resolve(req.result);
+            return new Promise((resolve, reject) => {
+                if (!db) {
+                    console.warn('DB not initialized, returning empty array');
+                    resolve([]);
+                    return;
+                }
+                
+                try {
+                    const tx = db.transaction([storeName], 'readonly');
+                    const req = tx.objectStore(storeName).getAll();
+                    req.onsuccess = () => {
+                        console.log('Loaded from IDB:', storeName, req.result.length, 'items');
+                        resolve(req.result);
+                    };
+                    req.onerror = () => {
+                        console.error('IDB getAll error:', req.error);
+                        reject(req.error);
+                    };
+                } catch (err) {
+                    console.error('getAllFromIDB exception:', err);
+                    reject(err);
+                }
             });
         }
 
         function deleteFromIDB(storeName, key) {
-            return new Promise((resolve) => {
-                const tx = db.transaction([storeName], 'readwrite');
-                tx.objectStore(storeName).delete(key);
-                tx.oncomplete = resolve;
+            return new Promise((resolve, reject) => {
+                if (!db) {
+                    console.warn('DB not initialized');
+                    resolve();
+                    return;
+                }
+                
+                try {
+                    const tx = db.transaction([storeName], 'readwrite');
+                    tx.objectStore(storeName).delete(key);
+                    tx.oncomplete = resolve;
+                    tx.onerror = () => reject(tx.error);
+                } catch (err) {
+                    console.error('deleteFromIDB exception:', err);
+                    reject(err);
+                }
             });
         }
 

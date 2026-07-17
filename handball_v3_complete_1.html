@@ -252,21 +252,16 @@
                 await loadData();
                 setupRealtimeSync();
                 
-                // Auto-Sync alle 30 Sekunden wenn Online
+                // Auto-Sync aktuelles Spiel alle 30 Sekunden wenn Online
                 setInterval(() => {
                     if (isOnline && currentGame) {
                         saveCurrentGame();
-                        console.log('Auto-sync triggered');
+                        console.log('Auto-save current game');
                     }
                 }, 30000);
                 
-                // Auto-Reload Spiele-Liste alle 20 Sekunden wenn auf Spiele-Tab
-                setInterval(async () => {
-                    if (isOnline && document.querySelector('[onclick="switchTab(\'games\')"]')?.classList.contains('active')) {
-                        await loadFromCloud();
-                        renderGames();
-                    }
-                }, 20000);
+                // WICHTIG: Auto-Reload NICHT aktivieren wegen Delete-Bug
+                // setInterval wird nach Bug-Fix wieder aktiviert
             } else {
                 showAuthScreen();
             }
@@ -1046,21 +1041,36 @@
                 ownGoals: 0,
                 opponentGoals: 0,
                 startTime: null,
-                pausedDuration: 0,
-                logs: []
+                totalPausedMs: 0,
+                logs: [],
+                finished: false
             };
 
             console.log('Saving game:', newGame);
 
+            // WICHTIG: Erst lokal speichern
             await saveToIDB('games', newGame);
+            console.log('Game saved to IndexedDB');
 
+            // Dann zu Supabase hochladen
             if (isOnline) {
                 try {
-                    await window.sbClient.from('games').insert(newGame);
-                    console.log('Game saved to Supabase');
+                    console.log('Uploading to Supabase...');
+                    const { data, error } = await window.sbClient.from('games').insert([newGame]);
+                    
+                    if (error) {
+                        console.error('Supabase INSERT error:', error);
+                        showToast('⚠️ Spiel lokal gespeichert, aber Cloud-Upload fehlgeschlagen');
+                    } else {
+                        console.log('Game successfully inserted into Supabase:', data);
+                        showToast('✓ Spiel erstellt und zu Cloud hochgeladen!');
+                    }
                 } catch (err) {
-                    console.log('Will sync when online:', err);
+                    console.error('Exception during Supabase upload:', err);
+                    showToast('⚠️ Spiel lokal gespeichert, später auto-synced');
                 }
+            } else {
+                showToast('📱 Offline - Spiel wird später synced');
             }
 
             games.push(newGame);
@@ -1074,7 +1084,7 @@
             document.getElementById('gameLeague').value = '';
             
             renderAll();
-            showToast('🆕 Spiel mit ' + newPlayers.filter(p => !p.isGoalkeeper).length + ' Feldspieler + ' + newPlayers.filter(p => p.isGoalkeeper).length + ' TW erstellt!');
+            console.log('Game creation complete');
         }
 
         function closePlayerModal() {

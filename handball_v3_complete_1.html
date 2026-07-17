@@ -1179,7 +1179,12 @@
             if (isOnline) {
                 try {
                     console.log('Uploading to Supabase...');
-                    const { data, error } = await window.sbClient.from('games').insert([newGame]);
+                    
+                    // Kopiere das Spiel aber OHNE 'finished' Feld (existiert nicht in DB)
+                    const gameForSupabase = { ...newGame };
+                    delete gameForSupabase.finished;
+                    
+                    const { data, error } = await window.sbClient.from('games').insert([gameForSupabase]);
                     
                     if (error) {
                         console.error('Supabase INSERT error:', error);
@@ -1267,6 +1272,10 @@
 
             if (isOnline) {
                 try {
+                    // Kopiere für Supabase aber OHNE 'finished' Feld
+                    const gameForSupabase = { ...currentGame };
+                    delete gameForSupabase.finished;
+                    
                     const existing = await window.sbClient
                         .from('games')
                         .select('id')
@@ -1278,7 +1287,7 @@
                     if (existing.data && existing.data.length > 0) {
                         const { error: updateError } = await window.sbClient
                             .from('games')
-                            .update(currentGame)
+                            .update(gameForSupabase)
                             .eq('id', currentGame.id)
                             .eq('user_id', currentUser.id);
                         
@@ -1290,7 +1299,7 @@
                     } else {
                         const { error: insertError } = await window.sbClient
                             .from('games')
-                            .insert(currentGame);
+                            .insert(gameForSupabase);
                         
                         if (insertError) {
                             console.error('Insert error:', insertError);

@@ -1175,34 +1175,33 @@
             await saveToIDB('games', newGame);
             console.log('Game saved to IndexedDB');
 
-            // Dann zu Supabase hochladen - NUR die notwendigen Spalten!
+            // Dann zu Supabase hochladen - MINIMAL SCHEMA
             if (isOnline) {
                 try {
                     console.log('Uploading to Supabase...');
                     
-                    // MINIMAL: Nur diese Spalten sollten existieren
+                    // SAFEST: Nur id, user_id, opponent, date, players hochladen
+                    // Alles andere ist in 'players' Array enthalten
                     const gameForSupabase = {
                         id: newGame.id,
                         user_id: newGame.user_id,
                         opponent: newGame.opponent,
                         date: newGame.date,
-                        players: newGame.players,
-                        ownGoals: newGame.ownGoals,
-                        opponentGoals: newGame.opponentGoals
+                        players: newGame.players  // Array mit allen Daten (Tore, Assists, etc.)
                     };
                     
                     const { data, error } = await window.sbClient.from('games').insert([gameForSupabase]);
                     
                     if (error) {
                         console.error('Supabase INSERT error:', error);
-                        showToast('⚠️ Spiel lokal gespeichert, aber Cloud-Upload fehlgeschlagen');
+                        showToast('⚠️ Spiel lokal gespeichert, Cloud-Sync später');
                     } else {
                         console.log('Game successfully inserted into Supabase:', data);
-                        showToast('✓ Spiel erstellt und zu Cloud hochgeladen!');
+                        showToast('✓ Spiel synced!');
                     }
                 } catch (err) {
                     console.error('Exception during Supabase upload:', err);
-                    showToast('⚠️ Spiel lokal gespeichert, später auto-synced');
+                    showToast('⚠️ Lokal gespeichert, Cloud-Sync später');
                 }
             } else {
                 showToast('📱 Offline - Spiel wird später synced');
@@ -1268,7 +1267,6 @@
         async function saveCurrentGame() {
             if (!currentGame) return;
 
-            // Sicherstelle dass user_id gesetzt ist
             if (!currentGame.user_id) {
                 currentGame.user_id = currentUser.id;
             }
@@ -1278,15 +1276,13 @@
 
             if (isOnline) {
                 try {
-                    // MINIMAL: Nur die notwendigen Spalten hochladen
+                    // SAFEST: Nur diese 5 Spalten (alles andere ist in players JSON)
                     const gameForSupabase = {
                         id: currentGame.id,
                         user_id: currentGame.user_id,
                         opponent: currentGame.opponent,
                         date: currentGame.date,
-                        players: currentGame.players,
-                        ownGoals: currentGame.ownGoals,
-                        opponentGoals: currentGame.opponentGoals
+                        players: currentGame.players
                     };
                     
                     const existing = await window.sbClient
@@ -1305,7 +1301,7 @@
                         if (updateError) {
                             console.error('Update error:', updateError);
                         } else {
-                            console.log('Game updated in Supabase');
+                            console.log('Game synced to Supabase');
                         }
                     } else {
                         const { error: insertError } = await window.sbClient
@@ -1315,7 +1311,7 @@
                         if (insertError) {
                             console.error('Insert error:', insertError);
                         } else {
-                            console.log('Game inserted into Supabase');
+                            console.log('Game synced to Supabase');
                         }
                     }
                 } catch (err) {

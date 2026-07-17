@@ -535,6 +535,33 @@
             renderAll();
         }
 
+        // Konvertiere Datenbank-Spalten (snake_case) zu App-Format (camelCase)
+        function convertGameFromDB(dbGame) {
+            try {
+                if (!dbGame) return null;
+                
+                return {
+                    id: dbGame.id,
+                    user_id: dbGame.user_id,
+                    opponent: dbGame.opponent || 'Unbekannt',
+                    name: dbGame.name || '',
+                    location: dbGame.location || '',
+                    league: dbGame.league || '',
+                    date: dbGame.date,
+                    players: dbGame.players || [],
+                    ownGoals: dbGame.own_goals !== undefined ? dbGame.own_goals : 0,
+                    opponentGoals: dbGame.opponent_goals !== undefined ? dbGame.opponent_goals : 0,
+                    startTime: dbGame.start_time,
+                    totalPausedMs: dbGame.total_paused_ms || 0,
+                    logs: dbGame.logs || [],
+                    finished: dbGame.finished || false
+                };
+            } catch (err) {
+                console.error('Error converting game:', dbGame, err);
+                return null;
+            }
+        }
+
         async function loadFromCloud() {
             try {
                 console.log('Loading from cloud for user:', currentUser.id);

@@ -1175,23 +1175,20 @@
             await saveToIDB('games', newGame);
             console.log('Game saved to IndexedDB');
 
-            // Dann zu Supabase hochladen
+            // Dann zu Supabase hochladen - NUR die notwendigen Spalten!
             if (isOnline) {
                 try {
                     console.log('Uploading to Supabase...');
                     
-                    // Nur die Spalten hochladen, die in der DB existieren
+                    // MINIMAL: Nur diese Spalten sollten existieren
                     const gameForSupabase = {
                         id: newGame.id,
                         user_id: newGame.user_id,
-                        name: newGame.name,
                         opponent: newGame.opponent,
                         date: newGame.date,
                         players: newGame.players,
                         ownGoals: newGame.ownGoals,
-                        opponentGoals: newGame.opponentGoals,
-                        startTime: newGame.startTime,
-                        logs: newGame.logs
+                        opponentGoals: newGame.opponentGoals
                     };
                     
                     const { data, error } = await window.sbClient.from('games').insert([gameForSupabase]);
@@ -1276,24 +1273,20 @@
                 currentGame.user_id = currentUser.id;
             }
 
-            console.log('Saving game to IDB and Supabase:', currentGame.id, currentGame.user_id);
-            
+            console.log('Saving game to IDB:', currentGame.id);
             await saveToIDB('games', currentGame);
 
             if (isOnline) {
                 try {
-                    // Nur die Spalten hochladen, die in der DB existieren
+                    // MINIMAL: Nur die notwendigen Spalten hochladen
                     const gameForSupabase = {
                         id: currentGame.id,
                         user_id: currentGame.user_id,
-                        name: currentGame.name,
                         opponent: currentGame.opponent,
                         date: currentGame.date,
                         players: currentGame.players,
                         ownGoals: currentGame.ownGoals,
-                        opponentGoals: currentGame.opponentGoals,
-                        startTime: currentGame.startTime,
-                        logs: currentGame.logs
+                        opponentGoals: currentGame.opponentGoals
                     };
                     
                     const existing = await window.sbClient
@@ -1301,8 +1294,6 @@
                         .select('id')
                         .eq('id', currentGame.id)
                         .eq('user_id', currentUser.id);
-
-                    console.log('Check existing game:', existing);
 
                     if (existing.data && existing.data.length > 0) {
                         const { error: updateError } = await window.sbClient
@@ -1319,7 +1310,7 @@
                     } else {
                         const { error: insertError } = await window.sbClient
                             .from('games')
-                            .insert(gameForSupabase);
+                            .insert([gameForSupabase]);
                         
                         if (insertError) {
                             console.error('Insert error:', insertError);

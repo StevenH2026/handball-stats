@@ -206,10 +206,11 @@
     <!-- Debug Box Modal -->
     <div id="debugModal" class="modal" style="display: none;">
         <div class="modal-content" style="max-width: 95%; max-height: 70vh;">
-            <div class="modal-title">🐛 Debug Logs</div>
+            <div class="modal-title">🐛 Debug & Verwaltung</div>
             <div id="debugOutput" style="font-size: 11px; line-height: 1.4; background: #f5f5f5; padding: 1rem; border-radius: 4px; max-height: 500px; overflow-y: auto; font-family: 'Courier New', monospace; white-space: pre-wrap; word-break: break-all;"></div>
-            <div class="modal-buttons" style="margin-top: 1rem;">
-                <button class="btn btn-danger" onclick="clearDebugLogs()">Löschen</button>
+            <div class="modal-buttons" style="margin-top: 1rem; display: flex; gap: 1rem; flex-wrap: wrap;">
+                <button class="btn btn-secondary" onclick="clearDebugLogs()">Logs löschen</button>
+                <button class="btn btn-danger" onclick="clearCache()">🗑️ Cache löschen</button>
                 <button class="btn btn-primary" onclick="closeDebugModal()">Schließen</button>
             </div>
         </div>
@@ -283,9 +284,31 @@
             document.getElementById('debugModal').style.display = 'none';
         }
 
-        function clearDebugLogs() {
-            debugLogs = [];
-            document.getElementById('debugOutput').textContent = 'Logs gelöscht';
+        function clearCache() {
+            if (!confirm('IndexedDB Cache wirklich löschen? Die lokalen Daten werden entfernt.')) return;
+            
+            try {
+                // Lösche die Datenbank
+                const deleteReq = indexedDB.deleteDatabase(DB_NAME);
+                
+                deleteReq.onsuccess = () => {
+                    console.log('Cache gelöscht!');
+                    showToast('✓ Cache gelöscht! Seite wird neu geladen...');
+                    
+                    // Reload nach 1 Sekunde
+                    setTimeout(() => {
+                        location.reload();
+                    }, 1000);
+                };
+                
+                deleteReq.onerror = () => {
+                    console.error('Cache löschen fehlgeschlagen');
+                    showToast('⚠️ Fehler beim Cache löschen');
+                };
+            } catch (err) {
+                console.error('Exception:', err);
+                showToast('⚠️ Fehler beim Cache löschen');
+            }
         }
         window.addEventListener('load', initApp);
         window.addEventListener('online', () => { isOnline = true; updateSyncStatus(); syncData(); });

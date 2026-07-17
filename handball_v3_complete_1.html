@@ -512,58 +512,31 @@
             renderAll();
         }
 
+        // Konvertiere Datenbank-Spalten (snake_case) zu App-Format (camelCase)
+        function convertGameFromDB(dbGame) {
+            if (!dbGame) return null;
+            return {
+                id: dbGame.id,
+                user_id: dbGame.user_id,
+                opponent: dbGame.opponent,
+                name: dbGame.name,
+                location: dbGame.location,
+                league: dbGame.league,
+                date: dbGame.date,
+                players: dbGame.players || [],
+                ownGoals: dbGame.own_goals || 0,
+                opponentGoals: dbGame.opponent_goals || 0,
+                startTime: dbGame.start_time,
+                totalPausedMs: dbGame.total_paused_ms || 0,
+                logs: dbGame.logs || [],
+                finished: dbGame.finished || false
+            };
+        }
+
         async function loadFromCloud() {
             try {
                 console.log('Loading from cloud for user:', currentUser.id);
                 
-                // Load players first
-                const { data: playersData, error: playersError } = await window.sbClient
-                    .from('players')
-                    .select('*')
-                    .eq('user_id', currentUser.id);
-
-                console.log('Players data:', playersData, playersError);
-
-                if (playersError) throw playersError;
-
-                if (!playersData || playersData.length === 0) {
-                    console.log('No players found, creating default players...');
-                    const newPlayers = [
-                        ...Array.from({ length: 25 }, (_, i) => ({ 
-                            id: 'p_' + currentUser.id.substring(0, 8) + '_' + (i+1), 
-                            number: i+1, 
-                            name: 'Spieler ' + (i+1), 
-                            is_goalkeeper: false, 
-                            user_id: currentUser.id 
-                        })),
-                        ...Array.from({ length: 4 }, (_, i) => ({ 
-                            id: 'gk_' + currentUser.id.substring(0, 8) + '_' + (i+1), 
-                            number: i+1, 
-                            name: 'TW ' + (i+1), 
-                            is_goalkeeper: true, 
-                            user_id: currentUser.id 
-                        }))
-                    ];
-                    
-                    const { error: insertError, data: insertedData } = await window.sbClient.from('players').insert(newPlayers);
-                    if (insertError) {
-                        console.error('Error inserting players:', insertError);
-                        throw insertError;
-                    }
-                    
-                    console.log('Players created:', insertedData);
-                    players = newPlayers;
-                } else {
-                    players = playersData;
-                }
-
-                console.log('Players loaded:', players.length);
-
-                // Save to IndexedDB
-                for (let player of players) {
-                    await saveToIDB('players', player);
-                }
-
                 // Load games
                 const { data: gamesData, error: gamesError } = await window.sbClient
                     .from('games')
@@ -575,7 +548,8 @@
 
                 if (gamesError) throw gamesError;
 
-                games = gamesData || [];
+                // Konvertiere alle Spiele von DB-Format zu App-Format
+                games = (gamesData || []).map(convertGameFromDB);
                 for (let game of games) {
                     await saveToIDB('games', game);
                 }
@@ -1175,19 +1149,27 @@
             await saveToIDB('games', newGame);
             console.log('Game saved to IndexedDB');
 
-            // Dann zu Supabase hochladen - MINIMAL SCHEMA
+            // Dann zu Supabase hochladen - MIT ALLEN SPALTEN
             if (isOnline) {
                 try {
                     console.log('Uploading to Supabase...');
                     
-                    // SAFEST: Nur id, user_id, opponent, date, players hochladen
-                    // Alles andere ist in 'players' Array enthalten
+                    // Alle Spalten mit korrekten Snake_case Namen
                     const gameForSupabase = {
                         id: newGame.id,
                         user_id: newGame.user_id,
                         opponent: newGame.opponent,
+                        name: newGame.name,
+                        location: newGame.location,
+                        league: newGame.league,
                         date: newGame.date,
-                        players: newGame.players  // Array mit allen Daten (Tore, Assists, etc.)
+                        players: newGame.players,
+                        own_goals: newGame.ownGoals,
+                        opponent_goals: newGame.opponentGoals,
+                        start_time: newGame.startTime,
+                        total_paused_ms: newGame.totalPausedMs || 0,
+                        logs: newGame.logs || [],
+                        finished: newGame.finished || false
                     };
                     
                     const { data, error } = await window.sbClient.from('games').insert([gameForSupabase]);
@@ -1276,13 +1258,22 @@
 
             if (isOnline) {
                 try {
-                    // SAFEST: Nur diese 5 Spalten (alles andere ist in players JSON)
+                    // Alle Spalten mit korrekten Snake_case Namen
                     const gameForSupabase = {
                         id: currentGame.id,
                         user_id: currentGame.user_id,
                         opponent: currentGame.opponent,
+                        name: currentGame.name,
+                        location: currentGame.location,
+                        league: currentGame.league,
                         date: currentGame.date,
-                        players: currentGame.players
+                        players: currentGame.players,
+                        own_goals: currentGame.ownGoals,
+                        opponent_goals: currentGame.opponentGoals,
+                        start_time: currentGame.startTime,
+                        total_paused_ms: currentGame.totalPausedMs || 0,
+                        logs: currentGame.logs || [],
+                        finished: currentGame.finished || false
                     };
                     
                     const existing = await window.sbClient

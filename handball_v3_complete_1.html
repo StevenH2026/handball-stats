@@ -254,13 +254,26 @@
         let currentGame = null;
         let selectedPlayer = null;
         let timerInterval = null;
-        let isOnline = navigator.onLine;
+        let isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
         let tempFieldPlayers = [];
         let tempGoalkeepers = [];
         let tempCoaches = [];
         let selectionMode = 'field';
         let lastAutoRefresh = null;
         let autoRefreshCounter = 0;
+        
+        // Überwache Online-Status zuverlässiger
+        const checkOnline = () => {
+            const wasOnline = isOnline;
+            isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
+            if (wasOnline !== isOnline) {
+                console.log('🌐 Online status changed: ' + isOnline);
+                updateSyncStatus();
+            }
+        };
+        
+        // Prüfe alle 5 Sekunden ob wir online sind
+        setInterval(checkOnline, 5000);
 
         const FIELD_STATS = ['goals', 'goals7m', 'assists', 'turnovers', 'foulsReceived', 'missedShots', 'missedShots7m', 'technicalFouls', 'missedPasses', 'oneOnOneContra', 'yellowCard', 'twoMinute', 'redCard'];
         const GK_STATS = ['saved', 'saved7m', 'conceded', 'conceded7m', 'assists', 'missedShots', 'missedShots7m', 'technicalFouls', 'missedPasses', 'turnovers', 'yellowCard', 'twoMinute', 'redCard'];
@@ -349,6 +362,7 @@
             const { data: { session } } = await sbClient.auth.getSession();
             if (session) {
                 currentUser = session.user;
+                console.log('✅ Authenticated:', currentUser.email);
                 showApp();
                 await loadData();
                 setupRealtimeSync();
@@ -356,19 +370,26 @@
                 // Auto-Sync aktuelles Spiel alle 2 Sekunden wenn Online (aggressiv für Tablet-Support)
                 setInterval(() => {
                     if (isOnline && currentGame) {
-                        console.log('Auto-save check: Game is dirty, saving...');
+                        console.log('💾 Auto-save check...');
                         saveCurrentGame();
                     }
                 }, 2000);
                 
                 // Auto-Polling: Lade neue Spiele alle 3 Sekunden wenn Online
+                // WICHTIG: Separat starten damit es sicher lädt
+                console.log('⏰ Starting auto-refresh interval...');
                 const autoRefreshInterval = setInterval(() => {
-                    if (isOnline && currentUser) {
-                        autoRefreshCounter++;
-                        console.log('Auto-refresh poll #' + autoRefreshCounter);
-                        autoRefreshGames();
-                    } else {
-                        console.log('Auto-refresh skipped: Online=' + isOnline);
+                    try {
+                        if (isOnline && currentUser) {
+                            autoRefreshCounter++;
+                            console.log('🔄 Auto-refresh poll #' + autoRefreshCounter + ' | User: ' + (currentUser ? 'OK' : 'MISSING'));
+                            autoRefreshGames();
+                        } else {
+                            if (!isOnline) console.log('⏸️ Skipped: Offline');
+                            if (!currentUser) console.log('⏸️ Skipped: No user');
+                        }
+                    } catch (err) {
+                        console.error('❌ setInterval callback error:', err.message);
                     }
                 }, 3000);
                 
@@ -576,13 +597,26 @@
         // AUTO-REFRESH
         // =====================================================
         async function autoRefreshGames() {
-            if (!isOnline || !currentUser) {
-                console.log('Auto-refresh skipped: isOnline=' + isOnline + ', hasUser=' + (currentUser ? 'yes' : 'no'));
+            console.log('🔄 autoRefreshGames started');
+            
+            if (!isOnline) {
+                console.log('Auto-refresh skipped: OFFLINE');
+                return;
+            }
+            
+            if (!currentUser) {
+                console.log('Auto-refresh skipped: NO USER');
+                return;
+            }
+
+            if (!window.sbClient) {
+                console.error('❌ Supabase client not initialized!');
                 return;
             }
             
             try {
-                console.log('Auto-refresh: Loading games from Supabase...');
+                console.log('📥 Fetching games...');
+                
                 // Lade alle Spiele (mit allen Spalten)
                 const { data: gamesData, error: gamesError } = await window.sbClient
                     .from('games')
@@ -591,7 +625,8 @@
                     .order('date', { ascending: false });
 
                 if (gamesError) {
-                    console.error('Auto-refresh error:', gamesError);
+                    console.error('❌ Games fetch error:', gamesError.message);
+                    showToast('⚠️ Games fetch failed: ' + gamesError.message);
                     return;
                 }
 
@@ -600,97 +635,89 @@
                     return;
                 }
 
-                console.log('Auto-refresh: Received ' + gamesData.length + ' games, local has ' + games.length);
-
-                let hasChanges = false;
-
-                // Lade auch Players neu (falls neue hinzugefügt wurden)
-                console.log('Auto-refresh: Also loading players...');
+                console.log('📥 Fetching players...');
+                
+                // Lade auch Players neu
                 const { data: playersData, error: playersError } = await window.sbClient
                     .from('players')
                     .select('*')
                     .eq('user_id', currentUser.id);
 
-                if (!playersError && playersData) {
-                    console.log('Auto-refresh: Received ' + playersData.length + ' players, local has ' + players.length);
-                    
-                    let playersChanged = false;
-                    if (playersData.length !== players.length) {
-                        playersChanged = true;
-                    } else {
-                        // Prüfe ob Spieler-Daten geändert wurden
-                        for (let p of playersData) {
-                            const local = players.find(lp => lp.id === p.id);
-                            if (!local || JSON.stringify(local) !== JSON.stringify(p)) {
-                                playersChanged = true;
-                                break;
-                            }
-                        }
-                    }
+                if (playersError) {
+                    console.error('❌ Players fetch error:', playersError.message);
+                    showToast('⚠️ Players fetch failed');
+                }
 
-                    if (playersChanged) {
-                        console.log('Auto-refresh: Players changed');
+                console.log('📊 Checking for changes... Games: ' + gamesData.length + ' | Players: ' + (playersData ? playersData.length : '?'));
+
+                let hasChanges = false;
+
+                // Spieler aktualisieren
+                if (playersData && playersData.length > 0) {
+                    try {
+                        if (playersData.length !== players.length) {
+                            console.log('⚠️ Player count changed: ' + players.length + ' → ' + playersData.length);
+                            hasChanges = true;
+                        }
+                        
                         players = playersData;
                         for (let player of players) {
                             await saveToIDB('players', player);
                         }
-                        hasChanges = true;
+                    } catch (err) {
+                        console.error('❌ Player update error:', err.message);
                     }
-                } else if (playersError) {
-                    console.error('Auto-refresh players error:', playersError);
                 }
 
-                // Aktualisiere oder füge neue Spiele hinzu
-                for (let dbGame of gamesData) {
-                    const convertedGame = convertGameFromDB(dbGame);
-                    const existingGameIndex = games.findIndex(g => g.id === convertedGame.id);
+                // Spiele aktualisieren
+                try {
+                    for (let dbGame of gamesData) {
+                        try {
+                            const convertedGame = convertGameFromDB(dbGame);
+                            const existingGameIndex = games.findIndex(g => g.id === convertedGame.id);
 
-                    if (existingGameIndex >= 0) {
-                        // Spiel existiert - Prüfe auf Änderungen
-                        const oldGame = games[existingGameIndex];
-                        if (JSON.stringify(oldGame) !== JSON.stringify(convertedGame)) {
-                            console.log('Auto-refresh: Game ' + convertedGame.id + ' changed');
-                            games[existingGameIndex] = convertedGame;
-                            hasChanges = true;
+                            if (existingGameIndex >= 0) {
+                                const oldGame = games[existingGameIndex];
+                                const oldJSON = JSON.stringify(oldGame);
+                                const newJSON = JSON.stringify(convertedGame);
+                                
+                                if (oldJSON !== newJSON) {
+                                    console.log('♻️ Game ' + convertedGame.id + ' updated');
+                                    games[existingGameIndex] = convertedGame;
+                                    hasChanges = true;
 
-                            // Wenn das aktuelle Spiel geändert wurde, aktualisiere es
-                            if (currentGame && currentGame.id === convertedGame.id) {
-                                currentGame = convertedGame;
-                                renderStats();
+                                    // Wenn das aktuelle Spiel geändert wurde
+                                    if (currentGame && currentGame.id === convertedGame.id) {
+                                        console.log('📝 Updating currentGame');
+                                        currentGame = convertedGame;
+                                        renderStats();
+                                    }
+                                }
+                            } else {
+                                console.log('➕ NEW game: ' + convertedGame.opponent);
+                                games.push(convertedGame);
+                                hasChanges = true;
                             }
+                        } catch (err) {
+                            console.error('❌ Error processing game:', err.message);
                         }
-                    } else {
-                        // Neues Spiel - füge hinzu
-                        console.log('Auto-refresh: NEW game ' + convertedGame.id + ' from ' + convertedGame.opponent);
-                        games.push(convertedGame);
-                        hasChanges = true;
                     }
+                } catch (err) {
+                    console.error('❌ Game update loop error:', err.message);
                 }
 
-                // Lösche Spiele die auf dem Server nicht mehr existieren
-                const serverIds = gamesData.map(g => g.id);
-                const oldGamesCount = games.length;
-                games = games.filter(g => serverIds.includes(g.id));
-                
-                if (games.length < oldGamesCount) {
-                    console.log('Auto-refresh: Deleted ' + (oldGamesCount - games.length) + ' local games');
-                    hasChanges = true;
-                }
-
-                // Setze lastAutoRefresh Zeit
+                // Setze lastAutoRefresh
                 lastAutoRefresh = Date.now();
+                console.log('✅ Auto-refresh complete. hasChanges=' + hasChanges);
 
-                // Nur rendern wenn sich etwas geändert hat
                 if (hasChanges) {
-                    console.log('Auto-refresh: Rendering games list');
                     renderGames();
-                    console.log('Auto-refresh: Complete. Now ' + games.length + ' games');
-                } else {
-                    console.log('Auto-refresh: No changes detected');
                 }
+                
             } catch (err) {
-                console.error('Auto-refresh exception:', err);
-                lastAutoRefresh = Date.now();
+                console.error('❌ FATAL autoRefreshGames error:', err.message);
+                console.error('Stack:', err.stack);
+                showToast('❌ Fatal error in autoRefresh');
             }
         }
 

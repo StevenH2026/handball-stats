@@ -650,27 +650,17 @@
                         if (localGame) {
                             // Spiel existiert lokal - check ob anders
                             if (JSON.stringify(localGame) !== JSON.stringify(convertedGame)) {
-                                // RACE CONDITION CHECK: Wenn lokal neuer ist, behalte lokal!
-                                // Das verhindert dass gerade erfasste Tore überschrieben werden
-                                const localLastUpdated = localGame.lastModified || localGame.updated_at || 0;
-                                const remoteLastUpdated = convertedGame.lastModified || convertedGame.updated_at || 0;
-                                
-                                if (localLastUpdated > remoteLastUpdated) {
-                                    console.log('⚠️ Local version is NEWER (' + localLastUpdated + ' > ' + remoteLastUpdated + '), keeping local for: ' + convertedGame.opponent);
-                                    // Behalte lokale Version - sie wurde gerade bearbeitet!
-                                    return;
-                                }
-                                
-                                console.log('♻️ Updating game: ' + convertedGame.opponent + ' (remote=' + remoteLastUpdated + ', local=' + localLastUpdated + ')');
-                                // Ersetze altes Spiel mit remote-Version
-                                games = games.filter(g => g.id !== convertedGame.id);
-                                games.push(convertedGame);
-                                hasChanges = true;
-                                
-                                // Wenn das aktuelle Spiel geändert, markiere
+                                // VEREINFACHTE MERGE: Wenn currentGame aktiv ist, behalte lokal
+                                // (es wird gerade bearbeitet und wird gleich gespeichert)
                                 if (currentGame && currentGame.id === convertedGame.id) {
-                                    currentGame = convertedGame;
-                                    currentGameWasUpdated = true;
+                                    console.log('⚠️ currentGame is active, keeping local version to avoid race conditions');
+                                    // Behalte lokale Version - sie wird gleich gespeichert
+                                } else {
+                                    // Spiel ist nicht aktiv, übernimm remote-Version
+                                    console.log('♻️ Updating game: ' + convertedGame.opponent);
+                                    games = games.filter(g => g.id !== convertedGame.id);
+                                    games.push(convertedGame);
+                                    hasChanges = true;
                                 }
                             }
                         } else {
@@ -734,8 +724,7 @@
                     startTime: dbGame.start_time,
                     totalPausedMs: dbGame.total_paused_ms || 0,
                     logs: dbGame.logs || [],
-                    finished: dbGame.finished || false,
-                    lastModified: dbGame.last_modified || 0  // Für Merge-Strategie
+                    finished: dbGame.finished || false
                 };
             } catch (err) {
                 console.error('Error converting game:', dbGame, err);
@@ -1861,9 +1850,6 @@
                 currentGame.user_id = currentUser.id;
                 console.log('⚠️ Game hatte keine user_id, setze auf:', currentGame.user_id.substring(0, 8) + '...');
             }
-            
-            // Setze lastModified timestamp für Merge-Strategie in autoRefresh
-            currentGame.lastModified = Date.now();
 
             console.log('💾 Saving game to IDB:', currentGame.id, '| Goals: ' + currentGame.ownGoals + ':' + currentGame.opponentGoals, '| user_id: ' + currentGame.user_id.substring(0, 8) + '...');
             await saveToIDB('games', currentGame);

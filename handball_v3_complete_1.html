@@ -358,66 +358,67 @@
             // Initialize IndexedDB
             initIndexedDB();
             
-            // Check auth state
-            const { data: { session } } = await sbClient.auth.getSession();
-            if (session) {
-                currentUser = session.user;
-                console.log('✅ Authenticated:', currentUser.email);
-                showApp();
+            // Listen for auth changes - EINZIGE Quelle der Wahrheit
+            sbClient.auth.onAuthStateChange(async (event, session) => {
+                console.log('🔐 Auth state changed:', event, '| Has session:', session ? 'YES' : 'NO');
                 
-                try {
-                    console.log('📥 Loading data from cloud...');
-                    await loadData();
-                    console.log('✅ Data loaded successfully');
-                } catch (err) {
-                    console.error('❌ FATAL: loadData failed:', err.message);
-                    console.error('Stack:', err.stack);
-                }
-                
-                // setupRealtimeSync brauchen wir nicht - Auto-Polling macht das!
-                
-                // Auto-Sync aktuelles Spiel alle 2 Sekunden wenn Online (aggressiv für Tablet-Support)
-                console.log('⏱️ Starting auto-save interval...');
-                setInterval(() => {
-                    if (isOnline && currentGame) {
-                        console.log('💾 Auto-save check...');
-                        saveCurrentGame();
-                    }
-                }, 2000);
-                
-                // Auto-Polling: Lade neue Spiele alle 3 Sekunden wenn Online
-                // WICHTIG: Separat starten damit es sicher lädt
-                console.log('⏰ Starting auto-refresh interval...');
-                const autoRefreshInterval = setInterval(() => {
-                    try {
-                        if (isOnline && currentUser) {
-                            autoRefreshCounter++;
-                            console.log('🔄 Auto-refresh poll #' + autoRefreshCounter + ' | User: ' + (currentUser ? 'OK' : 'MISSING'));
-                            autoRefreshGames();
-                        } else {
-                            if (!isOnline) console.log('⏸️ Skipped: Offline');
-                            if (!currentUser) console.log('⏸️ Skipped: No user');
-                        }
-                    } catch (err) {
-                        console.error('❌ setInterval callback error:', err.message);
-                    }
-                }, 3000);
-                
-                console.log('✅ Auto-refresh polling gestartet (alle 3 Sekunden)');
-            } else {
-                console.error('❌ NO SESSION - User not authenticated');
-                showAuthScreen();
-            }
-
-            // Listen for auth changes
-            sbClient.auth.onAuthStateChange((event, session) => {
                 if (session) {
                     currentUser = session.user;
+                    console.log('✅ Authenticated:', currentUser.email);
                     showApp();
-                    loadData();
+                    
+                    try {
+                        console.log('📥 Loading data from cloud...');
+                        await loadData();
+                        console.log('✅ Data loaded successfully');
+                    } catch (err) {
+                        console.error('❌ FATAL: loadData failed:', err.message);
+                    }
+                    
+                    // Auto-Sync aktuelles Spiel alle 2 Sekunden wenn Online
+                    if (!window.autoSaveInterval) {
+                        console.log('⏱️ Starting auto-save interval...');
+                        window.autoSaveInterval = setInterval(() => {
+                            if (isOnline && currentGame) {
+                                console.log('💾 Auto-save check...');
+                                saveCurrentGame();
+                            }
+                        }, 2000);
+                    }
+                    
+                    // Auto-Polling: Lade neue Spiele alle 3 Sekunden wenn Online
+                    if (!window.autoRefreshInterval) {
+                        console.log('⏰ Starting auto-refresh interval...');
+                        window.autoRefreshInterval = setInterval(() => {
+                            try {
+                                if (isOnline && currentUser) {
+                                    autoRefreshCounter++;
+                                    console.log('🔄 Auto-refresh poll #' + autoRefreshCounter + ' | User: ' + (currentUser ? 'OK' : 'MISSING'));
+                                    autoRefreshGames();
+                                } else {
+                                    if (!isOnline) console.log('⏸️ Skipped: Offline');
+                                    if (!currentUser) console.log('⏸️ Skipped: No user');
+                                }
+                            } catch (err) {
+                                console.error('❌ setInterval callback error:', err.message);
+                            }
+                        }, 3000);
+                    }
+                    
+                    console.log('✅ Auto-refresh polling gestartet (alle 3 Sekunden)');
                 } else {
+                    console.log('❌ NO SESSION - User not authenticated');
                     currentUser = null;
                     showAuthScreen();
+                    // Stoppe Intervals wenn logout
+                    if (window.autoSaveInterval) {
+                        clearInterval(window.autoSaveInterval);
+                        window.autoSaveInterval = null;
+                    }
+                    if (window.autoRefreshInterval) {
+                        clearInterval(window.autoRefreshInterval);
+                        window.autoRefreshInterval = null;
+                    }
                 }
             });
         }

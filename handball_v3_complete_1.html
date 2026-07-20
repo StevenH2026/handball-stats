@@ -650,8 +650,19 @@
                         if (localGame) {
                             // Spiel existiert lokal - check ob anders
                             if (JSON.stringify(localGame) !== JSON.stringify(convertedGame)) {
-                                console.log('♻️ Updating game: ' + convertedGame.opponent);
-                                // Ersetze altes Spiel
+                                // RACE CONDITION CHECK: Wenn lokal neuer ist, behalte lokal!
+                                // Das verhindert dass gerade erfasste Tore überschrieben werden
+                                const localLastUpdated = localGame.lastModified || localGame.updated_at || 0;
+                                const remoteLastUpdated = convertedGame.lastModified || convertedGame.updated_at || 0;
+                                
+                                if (localLastUpdated > remoteLastUpdated) {
+                                    console.log('⚠️ Local version is NEWER (' + localLastUpdated + ' > ' + remoteLastUpdated + '), keeping local for: ' + convertedGame.opponent);
+                                    // Behalte lokale Version - sie wurde gerade bearbeitet!
+                                    return;
+                                }
+                                
+                                console.log('♻️ Updating game: ' + convertedGame.opponent + ' (remote=' + remoteLastUpdated + ', local=' + localLastUpdated + ')');
+                                // Ersetze altes Spiel mit remote-Version
                                 games = games.filter(g => g.id !== convertedGame.id);
                                 games.push(convertedGame);
                                 hasChanges = true;
@@ -723,7 +734,8 @@
                     startTime: dbGame.start_time,
                     totalPausedMs: dbGame.total_paused_ms || 0,
                     logs: dbGame.logs || [],
-                    finished: dbGame.finished || false
+                    finished: dbGame.finished || false,
+                    lastModified: dbGame.last_modified || 0  // Für Merge-Strategie
                 };
             } catch (err) {
                 console.error('Error converting game:', dbGame, err);
@@ -1849,6 +1861,9 @@
                 currentGame.user_id = currentUser.id;
                 console.log('⚠️ Game hatte keine user_id, setze auf:', currentGame.user_id.substring(0, 8) + '...');
             }
+            
+            // Setze lastModified timestamp für Merge-Strategie in autoRefresh
+            currentGame.lastModified = Date.now();
 
             console.log('💾 Saving game to IDB:', currentGame.id, '| Goals: ' + currentGame.ownGoals + ':' + currentGame.opponentGoals, '| user_id: ' + currentGame.user_id.substring(0, 8) + '...');
             await saveToIDB('games', currentGame);
@@ -1885,7 +1900,8 @@
                         start_time: currentGame.startTime,
                         total_paused_ms: currentGame.totalPausedMs || 0,
                         logs: currentGame.logs || [],
-                        finished: currentGame.finished || false
+                        finished: currentGame.finished || false,
+                        last_modified: currentGame.lastModified  // Für Merge-Strategie
                     };
                     
                     const existing = await window.sbClient

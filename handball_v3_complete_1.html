@@ -599,25 +599,24 @@
         async function autoRefreshGames() {
             console.log('🔄 autoRefreshGames started');
             
-            if (!isOnline) {
-                console.log('Auto-refresh skipped: OFFLINE');
-                return;
-            }
-            
-            if (!currentUser) {
-                console.log('Auto-refresh skipped: NO USER');
-                return;
-            }
-
-            if (!window.sbClient) {
-                console.error('❌ Supabase client not initialized!');
-                return;
-            }
-            
             try {
-                console.log('📥 Fetching games...');
+                if (!isOnline) {
+                    console.log('⏸️ Offline - skipping');
+                    return;
+                }
                 
-                // Lade alle Spiele (mit allen Spalten)
+                if (!currentUser) {
+                    console.log('⏸️ No user - skipping');
+                    return;
+                }
+
+                if (!window.sbClient) {
+                    console.error('❌ No Supabase client');
+                    return;
+                }
+                
+                // Lade Spiele
+                console.log('📥 Fetching games...');
                 const { data: gamesData, error: gamesError } = await window.sbClient
                     .from('games')
                     .select('*')
@@ -625,99 +624,81 @@
                     .order('date', { ascending: false });
 
                 if (gamesError) {
-                    console.error('❌ Games fetch error:', gamesError.message);
-                    showToast('⚠️ Games fetch failed: ' + gamesError.message);
+                    console.error('❌ Fetch error:', gamesError.message);
                     return;
                 }
 
-                if (!gamesData) {
-                    console.log('Auto-refresh: No games data returned');
+                if (!gamesData || gamesData.length === 0) {
+                    console.log('✅ No games on server');
                     return;
                 }
 
-                console.log('📥 Fetching players...');
-                
-                // Lade auch Players neu
-                const { data: playersData, error: playersError } = await window.sbClient
-                    .from('players')
-                    .select('*')
-                    .eq('user_id', currentUser.id);
-
-                if (playersError) {
-                    console.error('❌ Players fetch error:', playersError.message);
-                    showToast('⚠️ Players fetch failed');
-                }
-
-                console.log('📊 Checking for changes... Games: ' + gamesData.length + ' | Players: ' + (playersData ? playersData.length : '?'));
+                console.log('📊 Received ' + gamesData.length + ' games from server');
 
                 let hasChanges = false;
+                let currentGameWasUpdated = false;
 
-                // Spieler aktualisieren
-                if (playersData && playersData.length > 0) {
+                // Für jedes Spiel vom Server
+                for (let dbGame of gamesData) {
                     try {
-                        if (playersData.length !== players.length) {
-                            console.log('⚠️ Player count changed: ' + players.length + ' → ' + playersData.length);
-                            hasChanges = true;
-                        }
+                        // Konvertiere von DB-Format
+                        const convertedGame = convertGameFromDB(dbGame);
                         
-                        players = playersData;
-                        for (let player of players) {
-                            await saveToIDB('players', player);
-                        }
-                    } catch (err) {
-                        console.error('❌ Player update error:', err.message);
-                    }
-                }
-
-                // Spiele aktualisieren
-                try {
-                    for (let dbGame of gamesData) {
-                        try {
-                            const convertedGame = convertGameFromDB(dbGame);
-                            const existingGameIndex = games.findIndex(g => g.id === convertedGame.id);
-
-                            if (existingGameIndex >= 0) {
-                                const oldGame = games[existingGameIndex];
-                                const oldJSON = JSON.stringify(oldGame);
-                                const newJSON = JSON.stringify(convertedGame);
-                                
-                                if (oldJSON !== newJSON) {
-                                    console.log('♻️ Game ' + convertedGame.id + ' updated');
-                                    games[existingGameIndex] = convertedGame;
-                                    hasChanges = true;
-
-                                    // Wenn das aktuelle Spiel geändert wurde
-                                    if (currentGame && currentGame.id === convertedGame.id) {
-                                        console.log('📝 Updating currentGame');
-                                        currentGame = convertedGame;
-                                        renderStats();
-                                    }
-                                }
-                            } else {
-                                console.log('➕ NEW game: ' + convertedGame.opponent);
+                        // Finde lokales Spiel
+                        let localGame = games.find(g => g.id === convertedGame.id);
+                        
+                        if (localGame) {
+                            // Spiel existiert lokal - check ob anders
+                            if (JSON.stringify(localGame) !== JSON.stringify(convertedGame)) {
+                                console.log('♻️ Updating game: ' + convertedGame.opponent);
+                                // Ersetze altes Spiel
+                                games = games.filter(g => g.id !== convertedGame.id);
                                 games.push(convertedGame);
                                 hasChanges = true;
+                                
+                                // Wenn das aktuelle Spiel geändert, markiere
+                                if (currentGame && currentGame.id === convertedGame.id) {
+                                    currentGame = convertedGame;
+                                    currentGameWasUpdated = true;
+                                }
                             }
-                        } catch (err) {
-                            console.error('❌ Error processing game:', err.message);
+                        } else {
+                            // Neues Spiel vom Server
+                            console.log('➕ NEW game: ' + convertedGame.opponent);
+                            games.push(convertedGame);
+                            hasChanges = true;
                         }
+                    } catch (err) {
+                        console.error('❌ Error converting game:', err.message);
                     }
-                } catch (err) {
-                    console.error('❌ Game update loop error:', err.message);
                 }
 
-                // Setze lastAutoRefresh
-                lastAutoRefresh = Date.now();
-                console.log('✅ Auto-refresh complete. hasChanges=' + hasChanges);
-
-                if (hasChanges) {
-                    renderGames();
+                console.log('✅ Complete. hasChanges=' + hasChanges + ', currentGameUpdated=' + currentGameWasUpdated);
+                
+                // Nur rendern wenn nötig
+                if (currentGameWasUpdated) {
+                    console.log('🖼️ Re-rendering stats');
+                    try {
+                        renderStats();
+                    } catch (err) {
+                        console.error('❌ renderStats error:', err.message);
+                    }
                 }
                 
+                if (hasChanges) {
+                    console.log('🖼️ Re-rendering games list');
+                    try {
+                        renderGames();
+                    } catch (err) {
+                        console.error('❌ renderGames error:', err.message);
+                    }
+                }
+                
+                // Setze letzten Update-Zeit
+                lastAutoRefresh = Date.now();
+                
             } catch (err) {
-                console.error('❌ FATAL autoRefreshGames error:', err.message);
-                console.error('Stack:', err.stack);
-                showToast('❌ Fatal error in autoRefresh');
+                console.error('❌ FATAL error in autoRefreshGames:', err.message);
             }
         }
 
@@ -995,12 +976,14 @@
             // LIVE DEBUG PANEL - hilft auf Tablet zu sehen was passiert
             const lastRefreshMs = lastAutoRefresh ? (Date.now() - lastAutoRefresh) : null;
             const lastRefreshSec = lastRefreshMs ? Math.round(lastRefreshMs / 1000) : '?';
+            const userId = currentUser ? currentUser.id.substring(0, 8) : '?';
             let debugPanel = '<div class="card" style="background: #f0f8ff; border-left: 4px solid #2196F3; font-size: 12px; margin-bottom: 1rem;">' +
                 '<div style="display: flex; justify-content: space-between; align-items: center;">' +
                 '<div>' +
                 '<span style="margin-right: 1rem;">🔄 Poll: ' + autoRefreshCounter + 'x</span>' +
                 '<span style="margin-right: 1rem;">⏱️ Letzte: ' + lastRefreshSec + 's</span>' +
-                '<span>📡 ' + (isOnline ? '🟢' : '🔴') + '</span>' +
+                '<span style="margin-right: 1rem;">📡 ' + (isOnline ? '🟢' : '🔴') + '</span>' +
+                '<span style="margin-right: 1rem;">👤 ' + userId + '</span>' +
                 '</div>' +
                 '<button class="btn btn-small" onclick="autoRefreshGames()" style="padding: 0.3rem 0.8rem; font-size: 11px;">🔄 Jetzt laden</button>' +
                 '</div></div>';
@@ -1370,10 +1353,14 @@
             
             // DEBUG-SEKTION - oben hinzufügen
             let pollStatus = autoRefreshCounter > 0 ? (autoRefreshCounter + ' x aufgerufen') : 'noch nicht aktiv';
+            const userIdShort = currentUser ? currentUser.id.substring(0, 8) : '?';
+            const currentGameUserId = currentGame ? (currentGame.user_id ? currentGame.user_id.substring(0, 8) : 'KEINE!') : '-';
             let html = '<div class="card" style="background: #fff9e6; border-left: 4px solid #ff9800;">' +
                 '<div class="card-title" style="color: #ff9800; margin-bottom: 1rem;">🔧 Debug-Info</div>' +
                 '<table style="width: 100%; font-size: 12px; border-collapse: collapse;">' +
-                '<tr><td style="padding: 0.5rem; border-bottom: 1px solid #ddd;"><strong>Authentifiziert:</strong></td><td style="padding: 0.5rem; border-bottom: 1px solid #ddd;">' + (currentUser ? '✅ ' + (currentUser.email || currentUser.id) : '❌ Nicht angemeldet') + '</td></tr>' +
+                '<tr><td style="padding: 0.5rem; border-bottom: 1px solid #ddd;"><strong>Auth User ID:</strong></td><td style="padding: 0.5rem; border-bottom: 1px solid #ddd; font-family: monospace;">' + userIdShort + (currentUser ? '...' : '') + '</td></tr>' +
+                '<tr><td style="padding: 0.5rem; border-bottom: 1px solid #ddd;"><strong>Aktives Spiel:</strong></td><td style="padding: 0.5rem; border-bottom: 1px solid #ddd;">' + (currentGame ? currentGame.opponent : '❌ Kein Spiel') + '</td></tr>' +
+                '<tr><td style="padding: 0.5rem; border-bottom: 1px solid #ddd;"><strong>Spiel user_id:</strong></td><td style="padding: 0.5rem; border-bottom: 1px solid #ddd; font-family: monospace; ' + (currentGameUserId === 'KEINE!' ? 'color: red;' : '') + '">' + currentGameUserId + (currentGame && currentGame.user_id ? '...' : '') + '</td></tr>' +
                 '<tr><td style="padding: 0.5rem; border-bottom: 1px solid #ddd;"><strong>Online:</strong></td><td style="padding: 0.5rem; border-bottom: 1px solid #ddd;">' + (isOnline ? '🟢 Ja' : '🔴 Nein') + '</td></tr>' +
                 '<tr><td style="padding: 0.5rem; border-bottom: 1px solid #ddd;"><strong>Supabase Client:</strong></td><td style="padding: 0.5rem; border-bottom: 1px solid #ddd;">' + (window.sbClient ? '✅ Initialisiert' : '❌ Fehler') + '</td></tr>' +
                 '<tr><td style="padding: 0.5rem; border-bottom: 1px solid #ddd;"><strong>IndexedDB:</strong></td><td style="padding: 0.5rem; border-bottom: 1px solid #ddd;">' + (db ? '✅ Bereit' : '❌ Fehler') + '</td></tr>' +
@@ -1843,9 +1830,10 @@
 
             if (!currentGame.user_id) {
                 currentGame.user_id = currentUser.id;
+                console.log('⚠️ Game hatte keine user_id, setze auf:', currentGame.user_id.substring(0, 8) + '...');
             }
 
-            console.log('💾 Saving game to IDB:', currentGame.id, '| Goals: ' + currentGame.ownGoals + ':' + currentGame.opponentGoals);
+            console.log('💾 Saving game to IDB:', currentGame.id, '| Goals: ' + currentGame.ownGoals + ':' + currentGame.opponentGoals, '| user_id: ' + currentGame.user_id.substring(0, 8) + '...');
             await saveToIDB('games', currentGame);
 
             if (isOnline) {
@@ -1853,7 +1841,13 @@
                     console.log('☁️ Syncing to Supabase...');
                     
                     if (!currentUser || !currentUser.id) {
-                        console.error('User not authenticated for sync');
+                        console.error('❌ User not authenticated for sync');
+                        return;
+                    }
+                    
+                    if (currentGame.user_id !== currentUser.id) {
+                        console.error('❌ CRITICAL: Game user_id (' + currentGame.user_id.substring(0, 8) + '...) !== Auth user_id (' + currentUser.id.substring(0, 8) + '...)');
+                        showToast('❌ FEHLER: Falsche user_id! Browser zurücksetzen.');
                         return;
                     }
                     

@@ -364,10 +364,26 @@
                 currentUser = session.user;
                 console.log('✅ Authenticated:', currentUser.email);
                 showApp();
-                await loadData();
-                setupRealtimeSync();
+                
+                try {
+                    console.log('📥 Loading data from cloud...');
+                    await loadData();
+                    console.log('✅ Data loaded successfully');
+                } catch (err) {
+                    console.error('❌ FATAL: loadData failed:', err.message);
+                    console.error('Stack:', err.stack);
+                }
+                
+                try {
+                    console.log('📡 Setting up realtime sync...');
+                    setupRealtimeSync();
+                    console.log('✅ Realtime sync setup complete');
+                } catch (err) {
+                    console.error('❌ FATAL: setupRealtimeSync failed:', err.message);
+                }
                 
                 // Auto-Sync aktuelles Spiel alle 2 Sekunden wenn Online (aggressiv für Tablet-Support)
+                console.log('⏱️ Starting auto-save interval...');
                 setInterval(() => {
                     if (isOnline && currentGame) {
                         console.log('💾 Auto-save check...');
@@ -395,6 +411,7 @@
                 
                 console.log('✅ Auto-refresh polling gestartet (alle 3 Sekunden)');
             } else {
+                console.error('❌ NO SESSION - User not authenticated');
                 showAuthScreen();
             }
 
@@ -650,17 +667,17 @@
                         if (localGame) {
                             // Spiel existiert lokal - check ob anders
                             if (JSON.stringify(localGame) !== JSON.stringify(convertedGame)) {
-                                // VEREINFACHTE MERGE: Wenn currentGame aktiv ist, behalte lokal
-                                // (es wird gerade bearbeitet und wird gleich gespeichert)
+                                // Einfach: Wenn remote anders ist, übernimm remote
+                                // Das funktioniert weil wir schnell zu Supabase speichern
+                                console.log('♻️ Updating game: ' + convertedGame.opponent);
+                                games = games.filter(g => g.id !== convertedGame.id);
+                                games.push(convertedGame);
+                                hasChanges = true;
+                                
+                                // Wenn das aktuelle Spiel geändert, markiere für Re-Render
                                 if (currentGame && currentGame.id === convertedGame.id) {
-                                    console.log('⚠️ currentGame is active, keeping local version to avoid race conditions');
-                                    // Behalte lokale Version - sie wird gleich gespeichert
-                                } else {
-                                    // Spiel ist nicht aktiv, übernimm remote-Version
-                                    console.log('♻️ Updating game: ' + convertedGame.opponent);
-                                    games = games.filter(g => g.id !== convertedGame.id);
-                                    games.push(convertedGame);
-                                    hasChanges = true;
+                                    currentGame = convertedGame;
+                                    currentGameWasUpdated = true;
                                 }
                             }
                         } else {

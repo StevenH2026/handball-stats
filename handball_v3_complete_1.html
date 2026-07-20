@@ -353,13 +353,13 @@
                 await loadData();
                 setupRealtimeSync();
                 
-                // Auto-Sync aktuelles Spiel alle 30 Sekunden wenn Online
+                // Auto-Sync aktuelles Spiel alle 2 Sekunden wenn Online (aggressiv für Tablet-Support)
                 setInterval(() => {
                     if (isOnline && currentGame) {
+                        console.log('Auto-save check: Game is dirty, saving...');
                         saveCurrentGame();
-                        console.log('Auto-save current game');
                     }
-                }, 30000);
+                }, 2000);
                 
                 // Auto-Polling: Lade neue Spiele alle 3 Sekunden wenn Online
                 const autoRefreshInterval = setInterval(() => {
@@ -1805,12 +1805,12 @@
                 currentGame.user_id = currentUser.id;
             }
 
-            console.log('Saving game to IDB:', currentGame.id);
+            console.log('💾 Saving game to IDB:', currentGame.id, '| Goals: ' + currentGame.ownGoals + ':' + currentGame.opponentGoals);
             await saveToIDB('games', currentGame);
 
             if (isOnline) {
                 try {
-                    console.log('Syncing to Supabase...');
+                    console.log('☁️ Syncing to Supabase...');
                     
                     if (!currentUser || !currentUser.id) {
                         console.error('User not authenticated for sync');
@@ -1844,6 +1844,7 @@
                         .eq('user_id', currentUser.id);
 
                     if (existing.data && existing.data.length > 0) {
+                        console.log('📝 Updating existing game...');
                         const { error: updateError } = await window.sbClient
                             .from('games')
                             .update(gameForSupabase)
@@ -1851,27 +1852,32 @@
                             .eq('user_id', currentUser.id);
                         
                         if (updateError) {
-                            console.error('Update error:', updateError);
-                            console.error('Error details:', updateError.message, updateError.details);
+                            console.error('❌ Update error:', updateError.message);
+                            console.error('Details:', updateError.details);
+                            showToast('⚠️ Update fehlgeschlagen');
                         } else {
-                            console.log('Game synced to Supabase');
+                            console.log('✅ Game updated on Supabase');
                         }
                     } else {
+                        console.log('🆕 Inserting new game...');
                         const { error: insertError } = await window.sbClient
                             .from('games')
                             .insert([gameForSupabase]);
                         
                         if (insertError) {
-                            console.error('Insert error:', insertError);
-                            console.error('Error details:', insertError.message, insertError.details);
+                            console.error('❌ Insert error:', insertError.message);
+                            console.error('Details:', insertError.details);
+                            showToast('⚠️ Insert fehlgeschlagen');
                         } else {
-                            console.log('Game synced to Supabase');
+                            console.log('✅ Game inserted to Supabase');
                         }
                     }
                 } catch (err) {
-                    console.error('Sync error:', err);
-                    console.error('Sync error message:', err.message);
+                    console.error('❌ Sync exception:', err.message);
+                    showToast('⚠️ Sync-Fehler: ' + err.message);
                 }
+            } else {
+                console.log('📱 Offline - saved locally only');
             }
         }
 

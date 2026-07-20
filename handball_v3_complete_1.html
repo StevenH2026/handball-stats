@@ -259,6 +259,8 @@
         let tempGoalkeepers = [];
         let tempCoaches = [];
         let selectionMode = 'field';
+        let lastAutoRefresh = null;
+        let autoRefreshCounter = 0;
 
         const FIELD_STATS = ['goals', 'goals7m', 'assists', 'turnovers', 'foulsReceived', 'missedShots', 'missedShots7m', 'technicalFouls', 'missedPasses', 'oneOnOneContra', 'yellowCard', 'twoMinute', 'redCard'];
         const GK_STATS = ['saved', 'saved7m', 'conceded', 'conceded7m', 'assists', 'missedShots', 'missedShots7m', 'technicalFouls', 'missedPasses', 'turnovers', 'yellowCard', 'twoMinute', 'redCard'];
@@ -359,12 +361,18 @@
                     }
                 }, 30000);
                 
-                // Auto-Polling: Lade neue Spiele alle 5 Sekunden wenn Online
-                setInterval(() => {
+                // Auto-Polling: Lade neue Spiele alle 3 Sekunden wenn Online
+                const autoRefreshInterval = setInterval(() => {
                     if (isOnline && currentUser) {
+                        autoRefreshCounter++;
+                        console.log('Auto-refresh poll #' + autoRefreshCounter);
                         autoRefreshGames();
+                    } else {
+                        console.log('Auto-refresh skipped: Online=' + isOnline);
                     }
-                }, 5000);
+                }, 3000);
+                
+                console.log('✅ Auto-refresh polling gestartet (alle 3 Sekunden)');
             } else {
                 showAuthScreen();
             }
@@ -568,10 +576,14 @@
         // AUTO-REFRESH
         // =====================================================
         async function autoRefreshGames() {
-            if (!isOnline || !currentUser) return;
+            if (!isOnline || !currentUser) {
+                console.log('Auto-refresh skipped: isOnline=' + isOnline + ', hasUser=' + (currentUser ? 'yes' : 'no'));
+                return;
+            }
             
             try {
-                // Lade nur die Spiele (nicht Players/Coaches)
+                console.log('Auto-refresh: Loading games from Supabase...');
+                // Lade alle Spiele (mit allen Spalten)
                 const { data: gamesData, error: gamesError } = await window.sbClient
                     .from('games')
                     .select('*')
@@ -583,9 +595,50 @@
                     return;
                 }
 
-                if (!gamesData) return;
+                if (!gamesData) {
+                    console.log('Auto-refresh: No games data returned');
+                    return;
+                }
+
+                console.log('Auto-refresh: Received ' + gamesData.length + ' games, local has ' + games.length);
 
                 let hasChanges = false;
+
+                // Lade auch Players neu (falls neue hinzugefügt wurden)
+                console.log('Auto-refresh: Also loading players...');
+                const { data: playersData, error: playersError } = await window.sbClient
+                    .from('players')
+                    .select('*')
+                    .eq('user_id', currentUser.id);
+
+                if (!playersError && playersData) {
+                    console.log('Auto-refresh: Received ' + playersData.length + ' players, local has ' + players.length);
+                    
+                    let playersChanged = false;
+                    if (playersData.length !== players.length) {
+                        playersChanged = true;
+                    } else {
+                        // Prüfe ob Spieler-Daten geändert wurden
+                        for (let p of playersData) {
+                            const local = players.find(lp => lp.id === p.id);
+                            if (!local || JSON.stringify(local) !== JSON.stringify(p)) {
+                                playersChanged = true;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (playersChanged) {
+                        console.log('Auto-refresh: Players changed');
+                        players = playersData;
+                        for (let player of players) {
+                            await saveToIDB('players', player);
+                        }
+                        hasChanges = true;
+                    }
+                } else if (playersError) {
+                    console.error('Auto-refresh players error:', playersError);
+                }
 
                 // Aktualisiere oder füge neue Spiele hinzu
                 for (let dbGame of gamesData) {
@@ -596,6 +649,7 @@
                         // Spiel existiert - Prüfe auf Änderungen
                         const oldGame = games[existingGameIndex];
                         if (JSON.stringify(oldGame) !== JSON.stringify(convertedGame)) {
+                            console.log('Auto-refresh: Game ' + convertedGame.id + ' changed');
                             games[existingGameIndex] = convertedGame;
                             hasChanges = true;
 
@@ -607,6 +661,7 @@
                         }
                     } else {
                         // Neues Spiel - füge hinzu
+                        console.log('Auto-refresh: NEW game ' + convertedGame.id + ' from ' + convertedGame.opponent);
                         games.push(convertedGame);
                         hasChanges = true;
                     }
@@ -618,16 +673,24 @@
                 games = games.filter(g => serverIds.includes(g.id));
                 
                 if (games.length < oldGamesCount) {
+                    console.log('Auto-refresh: Deleted ' + (oldGamesCount - games.length) + ' local games');
                     hasChanges = true;
                 }
 
+                // Setze lastAutoRefresh Zeit
+                lastAutoRefresh = Date.now();
+
                 // Nur rendern wenn sich etwas geändert hat
                 if (hasChanges) {
+                    console.log('Auto-refresh: Rendering games list');
                     renderGames();
-                    console.log('Auto-refresh: Games aktualisiert');
+                    console.log('Auto-refresh: Complete. Now ' + games.length + ' games');
+                } else {
+                    console.log('Auto-refresh: No changes detected');
                 }
             } catch (err) {
                 console.error('Auto-refresh exception:', err);
+                lastAutoRefresh = Date.now();
             }
         }
 
@@ -863,9 +926,10 @@
                 '</div>';
 
             // Status und Sync-Button
+            let pollStatus = lastAutoRefresh ? 'zuletzt: ' + Math.round((Date.now() - lastAutoRefresh) / 1000) + 's ago' : 'noch nicht geladen';
             let statusHTML = '<div class="card" style="background: #f5f5f5; border-left: 4px solid ' + (isOnline ? '#4CAF50' : '#ff9800') + ';">' +
                 '<div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">' +
-                '<div style="font-weight: bold; flex-grow: 1;">' + (isOnline ? '🟢 Online (Auto-Update jede 5s)' : '🔴 Offline') + ' | ' + games.length + ' Spiele</div>' +
+                '<div style="font-weight: bold; flex-grow: 1;">' + (isOnline ? '🟢 Online' : '🔴 Offline') + ' | ' + games.length + ' Spiele | <span style="font-size: 11px; color: #666;">🔄 ' + pollStatus + '</span></div>' +
                 '<button class="btn btn-success" onclick="autoRefreshGames()" style="padding: 0.5rem 1rem;">🔄 Jetzt laden</button>' +
                 '<button class="btn btn-info" onclick="manualSyncAllGames()" style="padding: 0.5rem 1rem;">☁️ Alle Sync</button>' +
                 '</div></div>';
@@ -1265,6 +1329,7 @@
             const container = document.getElementById('players');
             
             // DEBUG-SEKTION - oben hinzufügen
+            let pollStatus = autoRefreshCounter > 0 ? (autoRefreshCounter + ' x aufgerufen') : 'noch nicht aktiv';
             let html = '<div class="card" style="background: #fff9e6; border-left: 4px solid #ff9800;">' +
                 '<div class="card-title" style="color: #ff9800; margin-bottom: 1rem;">🔧 Debug-Info</div>' +
                 '<table style="width: 100%; font-size: 12px; border-collapse: collapse;">' +
@@ -1272,9 +1337,11 @@
                 '<tr><td style="padding: 0.5rem; border-bottom: 1px solid #ddd;"><strong>Online:</strong></td><td style="padding: 0.5rem; border-bottom: 1px solid #ddd;">' + (isOnline ? '🟢 Ja' : '🔴 Nein') + '</td></tr>' +
                 '<tr><td style="padding: 0.5rem; border-bottom: 1px solid #ddd;"><strong>Supabase Client:</strong></td><td style="padding: 0.5rem; border-bottom: 1px solid #ddd;">' + (window.sbClient ? '✅ Initialisiert' : '❌ Fehler') + '</td></tr>' +
                 '<tr><td style="padding: 0.5rem; border-bottom: 1px solid #ddd;"><strong>IndexedDB:</strong></td><td style="padding: 0.5rem; border-bottom: 1px solid #ddd;">' + (db ? '✅ Bereit' : '❌ Fehler') + '</td></tr>' +
-                '<tr><td style="padding: 0.5rem;"><strong>Lokale Spiele:</strong></td><td style="padding: 0.5rem;">' + games.length + '</td></tr>' +
+                '<tr><td style="padding: 0.5rem; border-bottom: 1px solid #ddd;"><strong>Lokale Spiele:</strong></td><td style="padding: 0.5rem;">' + games.length + ' | Spieler: ' + players.length + '</td></tr>' +
+                '<tr><td style="padding: 0.5rem;"><strong>Auto-Polling:</strong></td><td style="padding: 0.5rem; color: #ff9800;">' + pollStatus + '</td></tr>' +
                 '</table>' +
                 '<button class="btn btn-info" onclick="testSupabaseConnection()" style="width: 100%; margin-top: 1rem;">🧪 Supabase-Verbindung testen</button>' +
+                '<div style="font-size: 11px; color: #666; margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #ddd;">💡 Öffne Browser-Console (F12) um Auto-Polling-Logs zu sehen</div>' +
                 '</div>';
             
             // SPIELER TABELLEN

@@ -250,12 +250,14 @@
         let currentUser = null;
         let games = [];
         let players = [];
+        let coaches = [];
         let currentGame = null;
         let selectedPlayer = null;
         let timerInterval = null;
         let isOnline = navigator.onLine;
         let tempFieldPlayers = [];
         let tempGoalkeepers = [];
+        let tempCoaches = [];
         let selectionMode = 'field';
 
         const FIELD_STATS = ['goals', 'goals7m', 'assists', 'turnovers', 'foulsReceived', 'missedShots', 'missedShots7m', 'technicalFouls', 'missedPasses', 'oneOnOneContra', 'yellowCard', 'twoMinute', 'redCard'];
@@ -399,6 +401,10 @@
                         if (!database.objectStoreNames.contains('players')) {
                             database.createObjectStore('players', { keyPath: 'id' });
                             console.log('Created players store');
+                        }
+                        if (!database.objectStoreNames.contains('coaches')) {
+                            database.createObjectStore('coaches', { keyPath: 'letter' });
+                            console.log('Created coaches store');
                         }
                     };
                     
@@ -859,9 +865,14 @@
             // Betreuer
             if (currentGame.coaches && currentGame.coaches.length > 0) {
                 html += '<div class="card"><div class="card-title">👔 Betreuer</div><div class="player-grid">' +
-                    currentGame.coaches.map(c => '<button class="player-btn coach' + (selectedPlayer && selectedPlayer.letter === c.letter && selectedPlayer.isCoach ? ' selected' : '') + '" onclick="selectCoach(\'' + c.letter + '\'); renderStats();">' +
-                    '<div>Betreuer</div><div style="font-size: 14px; font-weight: bold;">' + c.letter + '</div>' +
-                    '<div style="font-size: 11px;">🟡 ' + (c.yellowCard || 0) + ' ⏱️ ' + (c.twoMinute || 0) + ' 🔴 ' + (c.redCard || 0) + '</div></button>').join('') +
+                    currentGame.coaches.map(c => {
+                        const coachData = coaches.find(coach => coach.letter === c.letter);
+                        const coachName = coachData ? coachData.name : 'Betreuer ' + c.letter;
+                        return '<button class="player-btn coach' + (selectedPlayer && selectedPlayer.letter === c.letter && selectedPlayer.isCoach ? ' selected' : '') + '" onclick="selectCoach(\'' + c.letter + '\'); renderStats();">' +
+                            '<div style="font-size: 14px; font-weight: bold;">' + c.letter + '</div>' +
+                            '<div style="font-size: 11px; font-weight: 600;">' + coachName + '</div>' +
+                            '<div style="font-size: 10px;">🟡 ' + (c.yellowCard || 0) + ' ⏱️ ' + (c.twoMinute || 0) + ' 🔴 ' + (c.redCard || 0) + '</div></button>';
+                    }).join('') +
                     '</div></div>';
             }
 
@@ -1169,6 +1180,20 @@
             html += '</table>';
             html += '<button class="btn btn-primary" style="width: 100%; margin-top: 1rem;" onclick="saveAllPlayers()">💾 Alle Spieler speichern</button>';
             html += '</div>';
+
+            // BETREUER - Standard A, B, C, D mit bearbeitbaren Namen
+            html += '<div class="card"><div class="card-title">👔 Betreuer (Standard Team)</div>';
+            html += '<table class="stats-table"><tr><th>Code</th><th>Name</th><th>Aktion</th></tr>';
+            
+            const coachLetters = ['A', 'B', 'C', 'D'];
+            coachLetters.forEach(letter => {
+                const coachData = coaches.find(c => c.letter === letter) || { letter: letter, name: 'Betreuer ' + letter };
+                html += '<tr><td><strong>' + letter + '</strong></td>' +
+                        '<td><input type="text" id="coach_name_' + letter + '" value="' + coachData.name + '" style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px;"></td>' +
+                        '<td><button class="btn btn-success" style="padding: 0.5rem 1rem; font-size: 11px; min-height: auto;" onclick="saveCoachName(\'' + letter + '\')">Speichern</button></td></tr>';
+            });
+            
+            html += '</table></div>';
             
             container.innerHTML = html;
         }
@@ -1637,6 +1662,66 @@
             saveCurrentGame();
             renderStats();
             showToast('⏸️ Team Timeout erfasst! (' + currentGame.timeouts.total + '/' + MAX_TIMEOUTS_TOTAL + ')');
+        }
+
+        // =====================================================
+        // COACH MANAGEMENT
+        // =====================================================
+        function saveCoachName(letter) {
+            const nameInput = document.getElementById('coach_name_' + letter);
+            if (!nameInput) return;
+            
+            const newName = nameInput.value.trim();
+            if (!newName) {
+                showToast('Name darf nicht leer sein!');
+                return;
+            }
+
+            let coach = coaches.find(c => c.letter === letter);
+            if (!coach) {
+                coach = { letter: letter, name: newName };
+                coaches.push(coach);
+            } else {
+                coach.name = newName;
+            }
+
+            saveToIDB('coaches', coach);
+
+            if (isOnline) {
+                try {
+                    if (coach.id) {
+                        window.sbClient.from('coaches').update({ name: newName }).eq('id', coach.id);
+                    } else {
+                        window.sbClient.from('coaches').insert([{ letter: letter, user_id: currentUser.id, name: newName }]);
+                    }
+                } catch (err) {
+                    console.log('Will sync when online');
+                }
+            }
+
+            showToast('✓ Betreuer ' + letter + ' gespeichert!');
+        }
+
+        // Legacy Funktionen für Kompatibilität
+        async function saveSingleCoach(coachId) {
+            return saveCoachName(coachId);
+        }
+
+        async function deleteCoach(coachId) {
+            // Nicht implementiert - Betreuer A,B,C,D können nicht gelöscht werden
+            showToast('Standard-Betreuer können nicht gelöscht werden');
+        }
+
+        function openAddCoachForm() {
+            showToast('Neue Betreuer werden über die Betreuer-Tabelle hinzugefügt');
+        }
+
+        function openCoachSelectionModal() {
+            showToast('Betreuer werden automatisch im Spiel verwendet');
+        }
+
+        function updateCoachCount() {
+            // Nicht nötig - Betreuer sind immer alle verfügbar
         }
 
         // =====================================================

@@ -1348,15 +1348,16 @@
             container.innerHTML = html;
         }
 
-        function renderPlayers() {
-            const container = document.getElementById('players');
+        function updateDebugPanel() {
+            const debugContainer = document.getElementById('debug-panel-container');
+            if (!debugContainer) return;
             
-            // DEBUG-SEKTION - oben hinzufügen
             let pollStatus = autoRefreshCounter > 0 ? (autoRefreshCounter + ' x aufgerufen') : 'noch nicht aktiv';
             const userIdShort = currentUser ? currentUser.id.substring(0, 8) : '?';
             const currentGameUserId = currentGame ? (currentGame.user_id ? currentGame.user_id.substring(0, 8) : 'KEINE!') : '-';
+            
             let html = '<div class="card" style="background: #fff9e6; border-left: 4px solid #ff9800;">' +
-                '<div class="card-title" style="color: #ff9800; margin-bottom: 1rem;">🔧 Debug-Info</div>' +
+                '<div class="card-title" style="color: #ff9800; margin-bottom: 1rem;">🔧 Debug-Info (LIVE)</div>' +
                 '<table style="width: 100%; font-size: 12px; border-collapse: collapse;">' +
                 '<tr><td style="padding: 0.5rem; border-bottom: 1px solid #ddd;"><strong>Auth User ID:</strong></td><td style="padding: 0.5rem; border-bottom: 1px solid #ddd; font-family: monospace;">' + userIdShort + (currentUser ? '...' : '') + '</td></tr>' +
                 '<tr><td style="padding: 0.5rem; border-bottom: 1px solid #ddd;"><strong>Aktives Spiel:</strong></td><td style="padding: 0.5rem; border-bottom: 1px solid #ddd;">' + (currentGame ? currentGame.opponent : '❌ Kein Spiel') + '</td></tr>' +
@@ -1365,11 +1366,18 @@
                 '<tr><td style="padding: 0.5rem; border-bottom: 1px solid #ddd;"><strong>Supabase Client:</strong></td><td style="padding: 0.5rem; border-bottom: 1px solid #ddd;">' + (window.sbClient ? '✅ Initialisiert' : '❌ Fehler') + '</td></tr>' +
                 '<tr><td style="padding: 0.5rem; border-bottom: 1px solid #ddd;"><strong>IndexedDB:</strong></td><td style="padding: 0.5rem; border-bottom: 1px solid #ddd;">' + (db ? '✅ Bereit' : '❌ Fehler') + '</td></tr>' +
                 '<tr><td style="padding: 0.5rem; border-bottom: 1px solid #ddd;"><strong>Lokale Spiele:</strong></td><td style="padding: 0.5rem;">' + games.length + ' | Spieler: ' + players.length + '</td></tr>' +
-                '<tr><td style="padding: 0.5rem;"><strong>Auto-Polling:</strong></td><td style="padding: 0.5rem; color: #ff9800;">' + pollStatus + '</td></tr>' +
+                '<tr><td style="padding: 0.5rem;"><strong>Auto-Polling:</strong></td><td style="padding: 0.5rem; color: ' + (pollStatus.includes('aufgerufen') ? '#4caf50' : '#ff9800') + ';">' + pollStatus + '</td></tr>' +
                 '</table>' +
-                '<button class="btn btn-info" onclick="testSupabaseConnection()" style="width: 100%; margin-top: 1rem;">🧪 Supabase-Verbindung testen</button>' +
-                '<div style="font-size: 11px; color: #666; margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #ddd;">💡 Öffne Browser-Console (F12) um Auto-Polling-Logs zu sehen</div>' +
                 '</div>';
+            
+            debugContainer.innerHTML = html;
+        }
+        
+        function renderPlayers() {
+            const container = document.getElementById('players');
+            
+            // Nutze Debug Panel Container
+            let html = '<div id="debug-panel-container"></div>';
             
             // SPIELER TABELLEN
             const fieldPlayers = players.filter(p => !p.is_goalkeeper && !p.isGoalkeeper).sort((a, b) => a.number - b.number);
@@ -1414,6 +1422,15 @@
             html += '</table></div>';
             
             container.innerHTML = html;
+            
+            // Starte Live-Update für Debug Panel - alle 500ms aktualisieren
+            if (window.debugPanelInterval) clearInterval(window.debugPanelInterval);
+            window.debugPanelInterval = setInterval(() => {
+                updateDebugPanel();
+            }, 500);
+            
+            // Erste Aktualisierung sofort
+            updateDebugPanel();
         }
 
         async function saveSinglePlayer(playerId) {

@@ -261,6 +261,7 @@
         let selectionMode = 'field';
         let lastAutoRefresh = null;
         let autoRefreshCounter = 0;
+        let saveGameDebounceTimer = null;  // Debounce timer für saveCurrentGame
         
         // Überwache Online-Status zuverlässiger
         const checkOnline = () => {
@@ -1862,6 +1863,23 @@
                 currentGame.user_id = currentUser.id;
                 console.log('⚠️ Game hatte keine user_id, setze auf:', currentGame.user_id.substring(0, 8) + '...');
             }
+
+            // DEBOUNCE: Warte 500ms bis keine neuen Änderungen mehr kommen
+            // Das verhindert Race Conditions bei schnellen Änderungen
+            if (saveGameDebounceTimer) {
+                clearTimeout(saveGameDebounceTimer);
+                console.log('⏳ Debounce: Verwerfe alten Timer, starte neuen (500ms)');
+            }
+
+            saveGameDebounceTimer = setTimeout(async () => {
+                console.log('💾 Saving game to IDB:', currentGame.id, '| Goals: ' + currentGame.ownGoals + ':' + currentGame.opponentGoals);
+                await saveToIDBActual();
+                saveGameDebounceTimer = null;
+            }, 500);
+        }
+
+        async function saveToIDBActual() {
+            if (!currentGame) return;
 
             console.log('💾 Saving game to IDB:', currentGame.id, '| Goals: ' + currentGame.ownGoals + ':' + currentGame.opponentGoals, '| user_id: ' + currentGame.user_id.substring(0, 8) + '...');
             await saveToIDB('games', currentGame);

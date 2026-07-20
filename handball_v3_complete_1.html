@@ -374,13 +374,7 @@
                     console.error('Stack:', err.stack);
                 }
                 
-                try {
-                    console.log('📡 Setting up realtime sync...');
-                    setupRealtimeSync();
-                    console.log('✅ Realtime sync setup complete');
-                } catch (err) {
-                    console.error('❌ FATAL: setupRealtimeSync failed:', err.message);
-                }
+                // setupRealtimeSync brauchen wir nicht - Auto-Polling macht das!
                 
                 // Auto-Sync aktuelles Spiel alle 2 Sekunden wenn Online (aggressiv für Tablet-Support)
                 console.log('⏱️ Starting auto-save interval...');

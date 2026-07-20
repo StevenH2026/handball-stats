@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🏐 Handball Statistik v3.0</title>
+    <title>🏐 Handball Statistik v3.1</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -97,12 +97,21 @@
         .player-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(90px, 1fr)); gap: 0.5rem; margin: 1.5rem 0; }
         .player-btn { padding: 1rem 0.5rem; background: #f9f9f9; border: 2px solid #ddd; border-radius: 8px; cursor: pointer; text-align: center; min-height: 120px; display: flex; flex-direction: column; justify-content: center; font-size: 13px; }
         .player-btn.selected { background: #185fa5; color: white; border-color: #185fa5; }
+        .player-btn.coach { background: #d4a574; border-color: #8b6f47; }
+        .player-btn.coach.selected { background: #8b6f47; color: white; }
         
         .stat-buttons { display: grid; grid-template-columns: repeat(auto-fit, minmax(80px, 1fr)); gap: 0.75rem; margin: 1.5rem 0; }
         .stat-btn { padding: 1rem 0.75rem; background: #f5f5f5; border: 2px solid #ddd; border-radius: 8px; cursor: pointer; font-size: 12px; font-weight: 600; min-height: 52px; }
         .stat-btn.plus { background: #e8f5e9; border-color: #639922; color: #2e5c0f; }
         .stat-btn.minus { background: #ffebee; border-color: #e24b4a; color: #a32d2d; }
         .stat-btn.info { background: #e3f2fd; border-color: #185fa5; color: #0d4080; }
+        .stat-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        
+        .timeout-display { display: flex; gap: 1rem; justify-content: center; align-items: center; background: #fff3cd; padding: 1rem; border-radius: 8px; margin: 1rem 0; border: 2px solid #ffc107; }
+        .timeout-item { text-align: center; }
+        .timeout-count { font-size: 24px; font-weight: 700; color: #185fa5; }
+        .timeout-label { font-size: 11px; color: #666; }
+        .timeout-halftime { font-size: 12px; color: #f39c12; font-weight: 600; }
         
         .stats-table { width: 100%; border-collapse: collapse; margin: 1rem 0; font-size: 12px; }
         .stats-table th { padding: 0.75rem; text-align: left; font-weight: 600; color: #185fa5; border-bottom: 2px solid #ddd; font-size: 11px; }
@@ -129,7 +138,7 @@
     <!-- Auth Screen -->
     <div class="auth-screen show" id="authScreen">
         <div class="auth-card">
-            <h1>🏐 Handball Statistik v3.0</h1>
+            <h1>🏐 Handball Statistik v3.1</h1>
             
             <div class="auth-tabs">
                 <button class="auth-tab-btn active" onclick="switchAuthTab('login')">Login</button>
@@ -157,7 +166,7 @@
     <!-- Main App -->
     <div class="app" id="mainApp" style="display: none;">
         <div class="header">
-            <h1>🏐 Handball Statistik v3.0</h1>
+            <h1>🏐 Handball Statistik v3.1</h1>
             <div class="header-right">
                 <div class="sync-indicator">
                     <div class="sync-dot" id="syncDot"></div>
@@ -224,6 +233,9 @@
         const SUPABASE_URL = 'https://ijutfxwmtrvhvrmnljam.supabase.co';
         const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlqdXRmeHdtdHJ2aHZybW5samFtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQyNjkzOTYsImV4cCI6MjA5OTg0NTM5Nn0.arTsOr0WWkDzjdzgGG5MqzGqvgteXALiPOXEl5_s9fw';
         const DB_NAME = 'HandballDB_v3';
+        const COACHES = ['A', 'B', 'C', 'D'];
+        const MAX_TIMEOUTS_TOTAL = 3;
+        const MAX_TIMEOUTS_HALFTIME = 2;
         
         // =====================================================
         // GLOBAL STATE
@@ -242,13 +254,13 @@
 
         const FIELD_STATS = ['goals', 'goals7m', 'assists', 'turnovers', 'foulsReceived', 'missedShots', 'missedShots7m', 'technicalFouls', 'missedPasses', 'oneOnOneContra', 'yellowCard', 'twoMinute', 'redCard'];
         const GK_STATS = ['saved', 'saved7m', 'conceded', 'conceded7m', 'assists', 'missedShots', 'missedShots7m', 'technicalFouls', 'missedPasses', 'turnovers', 'yellowCard', 'twoMinute', 'redCard'];
+        const COACH_STATS = ['yellowCard', 'twoMinute', 'redCard'];
 
         // =====================================================
         // DEBUG LOGGING
         // =====================================================
         let debugLogs = [];
         
-        // Capture console.log in unsere Debug-Box
         const originalLog = console.log;
         console.log = function(...args) {
             originalLog.apply(console, args);
@@ -288,14 +300,10 @@
             if (!confirm('IndexedDB Cache wirklich löschen? Die lokalen Daten werden entfernt.')) return;
             
             try {
-                // Lösche die Datenbank
                 const deleteReq = indexedDB.deleteDatabase(DB_NAME);
-                
                 deleteReq.onsuccess = () => {
                     console.log('Cache gelöscht!');
                     showToast('✓ Cache gelöscht! Seite wird neu geladen...');
-                    
-                    // Reload nach 1 Sekunde
                     setTimeout(() => {
                         location.reload();
                     }, 1000);
@@ -310,19 +318,17 @@
                 showToast('⚠️ Fehler beim Cache löschen');
             }
         }
+
         window.addEventListener('load', initApp);
         window.addEventListener('online', () => { isOnline = true; updateSyncStatus(); syncData(); });
         window.addEventListener('offline', () => { isOnline = false; updateSyncStatus(); });
 
         async function initApp() {
-            // Initialize Supabase
             const sbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
             window.sbClient = sbClient;
             
-            // Initialize IndexedDB
             initIndexedDB();
             
-            // Check auth state
             const { data: { session } } = await sbClient.auth.getSession();
             if (session) {
                 currentUser = session.user;
@@ -330,21 +336,16 @@
                 await loadData();
                 setupRealtimeSync();
                 
-                // Auto-Sync aktuelles Spiel alle 30 Sekunden wenn Online
                 setInterval(() => {
                     if (isOnline && currentGame) {
                         saveCurrentGame();
                         console.log('Auto-save current game');
                     }
                 }, 30000);
-                
-                // WICHTIG: Auto-Reload NICHT aktivieren wegen Delete-Bug
-                // setInterval wird nach Bug-Fix wieder aktiviert
             } else {
                 showAuthScreen();
             }
 
-            // Listen for auth changes
             sbClient.auth.onAuthStateChange((event, session) => {
                 if (session) {
                     currentUser = session.user;
@@ -398,24 +399,47 @@
         function saveToIDB(storeName, data) {
             return new Promise((resolve, reject) => {
                 if (!db) {
-                    console.warn('DB not initialized, attempting retry...');
-                    setTimeout(() => saveToIDB(storeName, data).then(resolve).catch(reject), 500);
+                    reject(new Error('IndexedDB not initialized'));
                     return;
                 }
                 
                 try {
-                    const tx = db.transaction([storeName], 'readwrite');
-                    tx.objectStore(storeName).put(data);
-                    tx.oncomplete = () => {
-                        console.log('Saved to IDB:', storeName);
-                        resolve();
+                    const transaction = db.transaction([storeName], 'readwrite');
+                    const store = transaction.objectStore(storeName);
+                    const req = store.put(data);
+                    
+                    req.onerror = () => {
+                        console.error('IDB save error:', req.error);
+                        reject(req.error);
                     };
-                    tx.onerror = () => {
-                        console.error('IDB transaction error:', tx.error);
-                        reject(tx.error);
+                    
+                    transaction.oncomplete = () => {
+                        console.log(`Saved to ${storeName}:`, data.id);
+                        resolve(data);
                     };
                 } catch (err) {
-                    console.error('saveToIDB exception:', err);
+                    console.error('IDB save exception:', err);
+                    reject(err);
+                }
+            });
+        }
+
+        function loadFromIDB(storeName, key) {
+            return new Promise((resolve, reject) => {
+                if (!db) {
+                    reject(new Error('IndexedDB not initialized'));
+                    return;
+                }
+                
+                try {
+                    const transaction = db.transaction([storeName], 'readonly');
+                    const store = transaction.objectStore(storeName);
+                    const req = store.get(key);
+                    
+                    req.onerror = () => reject(req.error);
+                    req.onsuccess = () => resolve(req.result);
+                } catch (err) {
+                    console.error('IDB load exception:', err);
                     reject(err);
                 }
             });
@@ -424,44 +448,19 @@
         function getAllFromIDB(storeName) {
             return new Promise((resolve, reject) => {
                 if (!db) {
-                    console.warn('DB not initialized, returning empty array');
-                    resolve([]);
+                    reject(new Error('IndexedDB not initialized'));
                     return;
                 }
                 
                 try {
-                    const tx = db.transaction([storeName], 'readonly');
-                    const req = tx.objectStore(storeName).getAll();
-                    req.onsuccess = () => {
-                        console.log('Loaded from IDB:', storeName, req.result.length, 'items');
-                        resolve(req.result);
-                    };
-                    req.onerror = () => {
-                        console.error('IDB getAll error:', req.error);
-                        reject(req.error);
-                    };
+                    const transaction = db.transaction([storeName], 'readonly');
+                    const store = transaction.objectStore(storeName);
+                    const req = store.getAll();
+                    
+                    req.onerror = () => reject(req.error);
+                    req.onsuccess = () => resolve(req.result);
                 } catch (err) {
-                    console.error('getAllFromIDB exception:', err);
-                    reject(err);
-                }
-            });
-        }
-
-        function deleteFromIDB(storeName, key) {
-            return new Promise((resolve, reject) => {
-                if (!db) {
-                    console.warn('DB not initialized');
-                    resolve();
-                    return;
-                }
-                
-                try {
-                    const tx = db.transaction([storeName], 'readwrite');
-                    tx.objectStore(storeName).delete(key);
-                    tx.oncomplete = resolve;
-                    tx.onerror = () => reject(tx.error);
-                } catch (err) {
-                    console.error('deleteFromIDB exception:', err);
+                    console.error('IDB getAll exception:', err);
                     reject(err);
                 }
             });
@@ -470,16 +469,27 @@
         // =====================================================
         // AUTH
         // =====================================================
+        function showAuthScreen() {
+            document.getElementById('authScreen').classList.add('show');
+            document.getElementById('mainApp').style.display = 'none';
+        }
+
+        function showApp() {
+            document.getElementById('authScreen').classList.remove('show');
+            document.getElementById('mainApp').style.display = 'flex';
+            document.getElementById('userEmail').textContent = currentUser.email.substring(0, 20);
+        }
+
         async function handleLogin() {
             const email = document.getElementById('loginEmail').value;
             const password = document.getElementById('loginPassword').value;
             const errorDiv = document.getElementById('loginError');
-
+            
             if (!email || !password) {
-                errorDiv.textContent = 'Bitte E-Mail und Passwort eingeben';
+                errorDiv.textContent = 'Bitte alle Felder ausfüllen';
                 return;
             }
-
+            
             try {
                 const { error } = await window.sbClient.auth.signInWithPassword({ email, password });
                 if (error) throw error;
@@ -492,272 +502,219 @@
             const name = document.getElementById('signupName').value;
             const email = document.getElementById('signupEmail').value;
             const password = document.getElementById('signupPassword').value;
-            const confirmPassword = document.getElementById('signupPasswordConfirm').value;
+            const passwordConfirm = document.getElementById('signupPasswordConfirm').value;
             const errorDiv = document.getElementById('signupError');
-
-            if (!name || !email || !password) {
+            
+            if (!name || !email || !password || !passwordConfirm) {
                 errorDiv.textContent = 'Bitte alle Felder ausfüllen';
                 return;
             }
-
-            if (password !== confirmPassword) {
+            
+            if (password !== passwordConfirm) {
                 errorDiv.textContent = 'Passwörter stimmen nicht überein';
                 return;
             }
-
+            
+            if (password.length < 6) {
+                errorDiv.textContent = 'Passwort muss mindestens 6 Zeichen lang sein';
+                return;
+            }
+            
             try {
-                const { error } = await window.sbClient.auth.signUp({ email, password });
+                const { error } = await window.sbClient.auth.signUp({ 
+                    email, 
+                    password,
+                    options: { data: { full_name: name } }
+                });
                 if (error) throw error;
                 errorDiv.textContent = '';
-                errorDiv.style.color = '#639922';
-                errorDiv.textContent = 'Registrierung erfolgreich!';
+                errorDiv.parentElement.innerHTML = '<div style="color: #639922; text-align: center; margin-bottom: 1rem;">✓ Registrierung erfolgreich! Bitte melden Sie sich an.</div>';
+                setTimeout(() => switchAuthTab('login'), 1500);
             } catch (err) {
                 errorDiv.textContent = err.message || 'Registrierung fehlgeschlagen';
             }
         }
 
+        function switchAuthTab(tab) {
+            document.querySelectorAll('.auth-tab').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.auth-tab-btn').forEach(el => el.classList.remove('active'));
+            
+            document.getElementById(tab + 'Tab').classList.add('active');
+            document.querySelector(`button[onclick="switchAuthTab('${tab}')"]`).classList.add('active');
+        }
+
         async function handleLogout() {
             await window.sbClient.auth.signOut();
+            currentUser = null;
+            showAuthScreen();
         }
 
         // =====================================================
-        // DATA LOADING
+        // DATA MANAGEMENT
         // =====================================================
         async function loadData() {
-            updateSyncStatus();
+            console.log('Loading data from Supabase...');
             
-            if (isOnline) {
-                await loadFromCloud();
-            } else {
-                await loadFromIDB();
-            }
-            
-            renderAll();
-        }
-
-        // Konvertiere Datenbank-Spalten (snake_case) zu App-Format (camelCase)
-        function convertGameFromDB(dbGame) {
             try {
-                if (!dbGame) return null;
+                const { data: gamesData, error: gamesError } = await window.sbClient
+                    .from('games')
+                    .select('*')
+                    .eq('user_id', currentUser.id);
                 
-                return {
-                    id: dbGame.id,
-                    user_id: dbGame.user_id,
-                    opponent: dbGame.opponent || 'Unbekannt',
-                    name: dbGame.name || '',
-                    location: dbGame.location || '',
-                    league: dbGame.league || '',
-                    date: dbGame.date,
-                    players: dbGame.players || [],
-                    ownGoals: dbGame.own_goals !== undefined ? dbGame.own_goals : 0,
-                    opponentGoals: dbGame.opponent_goals !== undefined ? dbGame.opponent_goals : 0,
-                    startTime: dbGame.start_time,
-                    totalPausedMs: dbGame.total_paused_ms || 0,
-                    logs: dbGame.logs || [],
-                    finished: dbGame.finished || false
-                };
-            } catch (err) {
-                console.error('Error converting game:', dbGame, err);
-                return null;
-            }
-        }
-
-        async function loadFromCloud() {
-            try {
-                console.log('Loading from cloud for user:', currentUser.id);
-                
-                // Load players first
                 const { data: playersData, error: playersError } = await window.sbClient
                     .from('players')
                     .select('*')
                     .eq('user_id', currentUser.id);
-
-                console.log('Players data:', playersData, playersError);
-
-                if (playersError) throw playersError;
-
-                if (!playersData || playersData.length === 0) {
-                    console.log('No players found, creating default players...');
-                    const newPlayers = [
-                        ...Array.from({ length: 25 }, (_, i) => ({ 
-                            id: 'p_' + currentUser.id.substring(0, 8) + '_' + (i+1), 
-                            number: i+1, 
-                            name: 'Spieler ' + (i+1), 
-                            is_goalkeeper: false, 
-                            user_id: currentUser.id 
-                        })),
-                        ...Array.from({ length: 4 }, (_, i) => ({ 
-                            id: 'gk_' + currentUser.id.substring(0, 8) + '_' + (i+1), 
-                            number: i+1, 
-                            name: 'TW ' + (i+1), 
-                            is_goalkeeper: true, 
-                            user_id: currentUser.id 
-                        }))
-                    ];
-                    
-                    const { error: insertError, data: insertedData } = await window.sbClient.from('players').insert(newPlayers);
-                    if (insertError) {
-                        console.error('Error inserting players:', insertError);
-                        throw insertError;
-                    }
-                    
-                    console.log('Players created:', insertedData);
-                    players = newPlayers;
-                } else {
-                    players = playersData;
-                }
-
-                console.log('Players loaded:', players.length);
-
-                // Save to IndexedDB
-                for (let player of players) {
-                    await saveToIDB('players', player);
-                }
                 
-                // Load games
-                const { data: gamesData, error: gamesError } = await window.sbClient
-                    .from('games')
-                    .select('*')
-                    .eq('user_id', currentUser.id)
-                    .order('date', { ascending: false });
-
-                console.log('Games data:', gamesData, gamesError);
-
                 if (gamesError) throw gamesError;
-
-                // Konvertiere alle Spiele von DB-Format zu App-Format
-                games = (gamesData || []).map(convertGameFromDB);
-                for (let game of games) {
-                    await saveToIDB('games', game);
-                }
-
-                console.log('Games loaded:', games.length);
-                updateSyncStatus();
-            } catch (err) {
-                console.error('Cloud load error:', err);
-                await loadFromIDB();
-            }
-        }
-
-        async function loadFromIDB() {
-            games = await getAllFromIDB('games');
-            players = await getAllFromIDB('players');
-        }
-
-        // =====================================================
-        // SYNC
-        // =====================================================
-        async function syncData() {
-            if (!isOnline || !currentGame) return;
-
-            try {
-                const gameData = { ...currentGame, user_id: currentUser.id };
+                if (playersError) throw playersError;
                 
-                const existing = await window.sbClient
-                    .from('games')
-                    .select('id')
-                    .eq('id', currentGame.id);
-
-                if (existing.data && existing.data.length > 0) {
-                    await window.sbClient.from('games').update(gameData).eq('id', currentGame.id);
-                } else {
-                    await window.sbClient.from('games').insert(gameData);
-                }
-
-                updateSyncStatus();
+                games = gamesData || [];
+                players = playersData || [];
+                
+                console.log('Loaded ' + games.length + ' games and ' + players.length + ' players');
+                
+                await Promise.all(games.map(g => saveToIDB('games', g)));
+                await Promise.all(players.map(p => saveToIDB('players', p)));
+                
+                renderGames();
             } catch (err) {
-                console.error('Sync error:', err);
+                console.error('Load error:', err);
+                // Fallback to IDB
+                games = await getAllFromIDB('games');
+                players = await getAllFromIDB('players');
+                renderGames();
             }
         }
 
-        function setupRealtimeSync() {
-            if (!window.sbClient) return;
-
-            window.sbClient.channel('games_changes')
-                .on('postgres_changes', { event: '*', schema: 'public', table: 'games' }, 
-                    (payload) => {
-                        loadData();
-                    })
-                .subscribe();
-        }
-
-        // =====================================================
-        // UI
-        // =====================================================
-        function switchAuthTab(tab) {
-            document.querySelectorAll('.auth-tab').forEach(t => t.classList.remove('active'));
-            document.querySelectorAll('.auth-tab-btn').forEach(b => b.classList.remove('active'));
-            document.getElementById(tab + 'Tab').classList.add('active');
-            event.target.classList.add('active');
-        }
-
-        function showAuthScreen() {
-            document.getElementById('authScreen').classList.add('show');
-            document.getElementById('mainApp').style.display = 'none';
-        }
-
-        function showApp() {
-            document.getElementById('authScreen').classList.remove('show');
-            document.getElementById('mainApp').style.display = 'flex';
-            document.getElementById('userEmail').textContent = currentUser?.email || 'User';
-        }
-
-        function switchTab(tab) {
-            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-            document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
-            document.getElementById(tab).classList.add('active');
-            event.target.classList.add('active');
+        async function saveCurrentGame() {
+            if (!currentGame) return;
             
-            if (tab === 'games') renderGames();
-            else if (tab === 'stats') renderStats();
-            else if (tab === 'analysis') renderAnalysis();
-            else if (tab === 'season') renderSeason();
-            else if (tab === 'players') renderPlayers();
+            try {
+                await saveToIDB('games', currentGame);
+                
+                if (isOnline) {
+                    const { error } = await window.sbClient
+                        .from('games')
+                        .upsert(currentGame);
+                    
+                    if (error) throw error;
+                    console.log('Game saved to Supabase');
+                }
+            } catch (err) {
+                console.error('Save error:', err);
+            }
         }
 
-        function renderAll() {
-            renderGames();
-            renderStats();
-            renderAnalysis();
-            renderSeason();
+        async function setupRealtimeSync() {
+            console.log('Setting up realtime sync...');
         }
 
+        // =====================================================
+        // UI NAVIGATION
+        // =====================================================
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.nav-btn').forEach(el => el.classList.remove('active'));
+            
+            document.getElementById(tabName).classList.add('active');
+            document.querySelector(`button[onclick="switchTab('${tabName}')"]`).classList.add('active');
+            
+            if (tabName === 'games') renderGames();
+            else if (tabName === 'stats') renderStats();
+            else if (tabName === 'analysis') renderAnalysis();
+            else if (tabName === 'season') renderSeason();
+            else if (tabName === 'players') renderPlayers();
+        }
+
+        // =====================================================
+        // GAMES TAB
+        // =====================================================
         function renderGames() {
             const container = document.getElementById('games');
+            const finishedGames = games.filter(g => g.finished).sort((a, b) => new Date(b.date) - new Date(a.date));
+            const activeGames = games.filter(g => !g.finished).sort((a, b) => new Date(b.date) - new Date(a.date));
             
-            container.innerHTML = '<div class="card"><div class="card-title">➕ Neues Spiel</div>' +
-                '<label class="form-label">Gegner*</label>' +
-                '<input type="text" class="form-input" id="gameOpponent" placeholder="z.B. RheinNeckar Löwen">' +
-                '<label class="form-label">Spiel-Name</label>' +
-                '<input type="text" class="form-input" id="gameName" placeholder="z.B. Heimspiel">' +
-                '<label class="form-label">Ort</label>' +
-                '<input type="text" class="form-input" id="gameLocation" placeholder="z.B. Viernheim">' +
-                '<label class="form-label">Liga</label>' +
-                '<input type="text" class="form-input" id="gameLeague" placeholder="z.B. Oberliga">' +
-                '<button class="btn btn-primary" onclick="openPlayerSelectionModal(\'field\')" style="width: 100%;">🆕 Spiel starten - Spieler auswählen</button>' +
-                '</div>';
+            let html = '<div class="card"><div class="card-title">➕ Neues Spiel</div>';
+            html += '<div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">';
+            html += '<input type="text" class="form-input" placeholder="Gegner" id="opponentInput" style="flex: 1; min-width: 150px; margin-bottom: 0.5rem;">';
+            html += '<input type="date" class="form-input" id="dateInput" style="flex: 1; min-width: 120px; margin-bottom: 0.5rem;">';
+            html += '<button class="btn btn-primary" onclick="createNewGame()" style="flex: 1; min-width: 100px;">Erstellen</button>';
+            html += '</div></div>';
+            
+            if (activeGames.length > 0) {
+                html += '<div class="card"><div class="card-title">🎮 Aktive Spiele</div>';
+                activeGames.forEach(game => {
+                    html += '<div style="background: #f9f9f9; padding: 1rem; border-radius: 8px; margin-bottom: 0.75rem; cursor: pointer;" onclick="loadGame(\'' + game.id + '\'); switchTab(\'stats\');"><strong>' + game.opponent + '</strong><br><small>' + new Date(game.date).toLocaleDateString('de-DE') + ' - ' + game.ownGoals + ':' + game.opponentGoals + '</small></div>';
+                });
+                html += '</div>';
+            }
+            
+            if (finishedGames.length > 0) {
+                html += '<div class="card"><div class="card-title">✅ Beendete Spiele</div>';
+                finishedGames.forEach(game => {
+                    html += '<div style="background: #e8f5e9; padding: 1rem; border-radius: 8px; margin-bottom: 0.75rem; cursor: pointer;" onclick="loadGame(\'' + game.id + '\'); switchTab(\'analysis\');"><strong>' + game.opponent + '</strong><br><small>' + new Date(game.date).toLocaleDateString('de-DE') + ' - Ergebnis: ' + game.ownGoals + ':' + game.opponentGoals + '</small></div>';
+                });
+                html += '</div>';
+            }
+            
+            container.innerHTML = html;
+            document.getElementById('dateInput').valueAsDate = new Date();
+        }
 
-            if (games.length > 0) {
-                container.innerHTML += '<div class="card"><div class="card-title">📋 Spiele (' + games.length + ')</div>' + 
-                    games.map(g => {
-                        const opponent = g.opponent || 'Unbekannt';
-                        const ownGoals = g.ownGoals !== undefined ? g.ownGoals : (g.own_goals || 0);
-                        const oppGoals = g.opponentGoals !== undefined ? g.opponentGoals : (g.opponent_goals || 0);
-                        
-                        return '<div class="card" onclick="selectGame(\'' + g.id + '\')" style="cursor: pointer; display: flex; justify-content: space-between; align-items: center; position: relative;">' +
-                        '<div><div class="card-title" style="margin: 0; font-size: 14px;">' + opponent + 
-                        (g.finished ? ' <span style="background: #639922; color: white; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 10px; margin-left: 0.5rem;">✓ BEENDET</span>' : '') + 
-                        '</div>' +
-                        '<div style="font-size: 11px; color: #999;">' + new Date(g.date).toLocaleDateString('de-DE') + '</div></div>' +
-                        '<div style="font-size: 24px; font-weight: 700; color: #185fa5;">' + ownGoals + ':' + oppGoals + '</div>' +
-                        '<button class="btn btn-danger" style="padding: 0.5rem; min-height: auto;" onclick="event.stopPropagation(); deleteGame(\'' + g.id + '\');">Del</button>' +
-                        '</div>';
-                    }).join('') + '</div>';
-            } else {
-                container.innerHTML += '<div class="empty-state">Noch keine Spiele</div>';
+        function createNewGame() {
+            const opponent = document.getElementById('opponentInput').value;
+            const date = document.getElementById('dateInput').value;
+            
+            if (!opponent || !date) {
+                showToast('Bitte alle Felder ausfüllen');
+                return;
+            }
+            
+            const gameId = 'game_' + Date.now();
+            currentGame = {
+                id: gameId,
+                user_id: currentUser.id,
+                opponent: opponent,
+                date: new Date(date).toISOString(),
+                ownGoals: 0,
+                opponentGoals: 0,
+                players: [],
+                coaches: COACHES.map(c => ({
+                    letter: c,
+                    yellowCard: 0,
+                    twoMinute: 0,
+                    redCard: 0
+                })),
+                timeouts: {
+                    total: 0,
+                    firstHalf: 0,
+                    secondHalf: 0
+                },
+                timer: 0,
+                period: 1,
+                finished: false,
+                location: '',
+                notes: ''
+            };
+            
+            saveCurrentGame();
+            switchTab('stats');
+            renderStats();
+            showToast('✓ Neues Spiel erstellt!');
+        }
+
+        function loadGame(gameId) {
+            currentGame = games.find(g => g.id === gameId);
+            selectedPlayer = null;
+            if (currentGame) {
+                renderStats();
             }
         }
 
+        // =====================================================
+        // STATS TAB - HAUPTFUNKTION
+        // =====================================================
         function renderStats() {
             const container = document.getElementById('stats');
             
@@ -765,38 +722,48 @@
                 container.innerHTML = '<div class="empty-state">Kein Spiel ausgewählt</div>';
                 return;
             }
-
-            const fieldPlayers = currentGame.players.filter(p => !p.isGoalkeeper && !p.is_goalkeeper);
-            const gks = currentGame.players.filter(p => p.isGoalkeeper || p.is_goalkeeper);
-            const elapsed = getElapsedSeconds();
-            const isHalftime = elapsed >= 1800;
-            const isRunning = timerInterval !== null;
-
-            let html = '<div class="scoreboard-sticky">' +
-                '<div style="font-size: 12px; margin-bottom: 0.5rem;">' + currentGame.opponent + ' • ' + currentGame.players.length + ' Spieler</div>' +
-                '<div class="timer">' + formatTime(elapsed) + (isHalftime ? ' <span class="halftime-badge">HALBZEIT</span>' : '') + '</div>' +
-                '<div class="timer-buttons">' +
-                '<button class="btn ' + (isRunning ? 'btn-warning' : 'btn-success') + '" onclick="toggleTimer()">' + (isRunning ? '⏸️ Pause' : '▶️ Start') + '</button>' +
-                '</div>' +
-                '<div class="score-display">' +
-                '<div class="score-team"><div style="font-size: 13px;">Wir</div><div class="score-number">' + (currentGame.ownGoals || 0) + '</div>' +
-                '<input type="number" min="0" value="' + (currentGame.ownGoals || 0) + '" style="width: 60px; text-align: center; margin-top: 0.5rem; font-size: 13px;" onchange="updateGameScore(this.value, ' + (currentGame.opponentGoals || 0) + ')"></div>' +
-                '<div style="font-size: 22px; font-weight: 600;">:</div>' +
-                '<div class="score-team"><div style="font-size: 13px;">Gegner</div><div class="score-number">' + (currentGame.opponentGoals || 0) + '</div>' +
-                '<input type="number" min="0" value="' + (currentGame.opponentGoals || 0) + '" style="width: 60px; text-align: center; margin-top: 0.5rem; font-size: 13px;" onchange="updateGameScore(' + (currentGame.ownGoals || 0) + ', this.value)"></div>' +
-                '</div>';
-
-            if (currentGame.logs && currentGame.logs.length > 0) {
-                html += '<div class="live-feed"><div style="font-size: 11px; font-weight: 600; opacity: 0.8; margin-bottom: 0.5rem;">📝 Letzte Erfassungen</div>';
-                currentGame.logs.forEach(log => {
-                    html += '<div class="feed-item"><strong>#' + log.number + ' ' + log.name + '</strong><br>' + log.time + ' • ' + log.action + '</div>';
-                });
-                html += '</div>';
-            }
-
+            
+            let html = '<div class="scoreboard-sticky">';
+            html += '<div class="score-display">';
+            html += '<div class="score-team"><div style="font-size: 12px;">Wir</div><div class="score-number">' + currentGame.ownGoals + '</div></div>';
+            html += '<div class="score-team"><div style="font-size: 12px;">Zeit</div><div class="timer">' + formatTime(currentGame.timer) + '</div></div>';
+            html += '<div class="score-team"><div style="font-size: 12px;">Gegner</div><div class="score-number">' + currentGame.opponentGoals + '</div></div>';
             html += '</div>';
-
-            // Feldspieler
+            
+            html += '<div class="timer-buttons">';
+            html += '<button class="btn btn-primary" onclick="toggleTimer()">⏱️ Start/Stop</button>';
+            html += '<button class="btn btn-info" onclick="resetTimer()">↺ Reset</button>';
+            html += '</div>';
+            
+            html += '<div style="display: flex; gap: 0.5rem; justify-content: center;">';
+            html += '<button class="btn" onclick="updateScore(1)">➕ Tor</button>';
+            html += '<button class="btn btn-danger" onclick="updateScore(-1)">➖ Undo</button>';
+            html += '<button class="btn btn-warning" onclick="changeOwnGoals()">🎯 Ändern</button>';
+            html += '</div>';
+            
+            html += '</div>';
+            
+            // TIMEOUT DISPLAY
+            html += '<div class="timeout-display">';
+            html += '<div class="timeout-item">';
+            html += '<div class="timeout-count">' + currentGame.timeouts.total + '/' + MAX_TIMEOUTS_TOTAL + '</div>';
+            html += '<div class="timeout-label">Gesamt Timeouts</div>';
+            html += '</div>';
+            html += '<div class="timeout-item">';
+            html += '<div class="timeout-count">' + currentGame.timeouts.firstHalf + '/' + MAX_TIMEOUTS_HALFTIME + '</div>';
+            html += '<div class="timeout-halftime">1. Halbzeit</div>';
+            html += '</div>';
+            html += '<div class="timeout-item">';
+            html += '<div class="timeout-count">' + currentGame.timeouts.secondHalf + '/' + MAX_TIMEOUTS_HALFTIME + '</div>';
+            html += '<div class="timeout-halftime">2. Halbzeit</div>';
+            html += '</div>';
+            html += '<div style="flex: 1; text-align: center;">';
+            html += '<button class="btn btn-info" onclick="addTeamTimeout()" ' + (currentGame.timeouts.total >= MAX_TIMEOUTS_TOTAL ? 'disabled' : '') + '>⏸️ Team Timeout</button>';
+            html += '</div>';
+            html += '</div>';
+            
+            // FELDSPIELER
+            const fieldPlayers = currentGame.players.filter(p => !p.isGoalkeeper && !p.is_goalkeeper);
             if (fieldPlayers.length > 0) {
                 html += '<div class="card"><div class="card-title">🏐 Feldspieler (' + fieldPlayers.length + ')</div><div class="player-grid">' +
                     fieldPlayers.map(p => '<button class="player-btn' + (selectedPlayer && selectedPlayer.id === p.id ? ' selected' : '') + '" onclick="selectPlayerFromGame(\'' + p.id + '\'); renderStats();">' +
@@ -804,8 +771,25 @@
                     '<div style="font-size: 11px;">⚽ ' + ((p.goals || 0) + (p.goals7m || 0)) + '</div></button>').join('') +
                     '</div></div>';
             }
-
-            if (selectedPlayer && !(selectedPlayer.isGoalkeeper || selectedPlayer.is_goalkeeper)) {
+            
+            // TORWARTE
+            const gks = currentGame.players.filter(p => p.isGoalkeeper || p.is_goalkeeper);
+            if (gks.length > 0) {
+                html += '<div class="card"><div class="card-title">🥅 Torwarte (' + gks.length + ')</div><div class="player-grid">' +
+                    gks.map(p => '<button class="player-btn' + (selectedPlayer && selectedPlayer.id === p.id ? ' selected' : '') + '" onclick="selectPlayerFromGame(\'' + p.id + '\'); renderStats();">' +
+                    '<div>TW</div><div style="font-size: 12px;">' + p.name + '</div></button>').join('') +
+                    '</div></div>';
+            }
+            
+            // BETREUER
+            html += '<div class="card"><div class="card-title">👔 Betreuer</div><div class="player-grid">' +
+                currentGame.coaches.map(c => '<button class="player-btn coach' + (selectedPlayer && selectedPlayer.letter === c.letter ? ' selected' : '') + '" onclick="selectCoach(\'' + c.letter + '\'); renderStats();">' +
+                '<div>Betreuer</div><div style="font-size: 14px; font-weight: bold;">' + c.letter + '</div>' +
+                '<div style="font-size: 11px;">🟡 ' + (c.yellowCard || 0) + ' ⏱️ ' + (c.twoMinute || 0) + ' 🔴 ' + (c.redCard || 0) + '</div></button>').join('') +
+                '</div></div>';
+            
+            // FELDSPIELER STATS
+            if (selectedPlayer && !(selectedPlayer.isGoalkeeper || selectedPlayer.is_goalkeeper) && !selectedPlayer.isCoach) {
                 html += '<div class="card"><div class="card-title">📊 ' + selectedPlayer.name + '</div>' +
                     '<div class="stat-buttons">' +
                     '<button class="stat-btn plus" onclick="updateStat(\'' + selectedPlayer.id + '\', \'goals\', 1)">⚽ Feld</button>' +
@@ -820,15 +804,8 @@
                     '<button class="stat-btn minus" onclick="updateStat(\'' + selectedPlayer.id + '\', \'redCard\', 1)">🔴 Rot</button>' +
                     '</div></div>';
             }
-
-            // Torwarte
-            if (gks.length > 0) {
-                html += '<div class="card"><div class="card-title">🥅 Torwarte (' + gks.length + ')</div><div class="player-grid">' +
-                    gks.map(p => '<button class="player-btn' + (selectedPlayer && selectedPlayer.id === p.id ? ' selected' : '') + '" onclick="selectPlayerFromGame(\'' + p.id + '\'); renderStats();">' +
-                    '<div>TW</div><div style="font-size: 12px;">' + p.name + '</div></button>').join('') +
-                    '</div></div>';
-            }
-
+            
+            // TORWART STATS
             if (selectedPlayer && (selectedPlayer.isGoalkeeper || selectedPlayer.is_goalkeeper)) {
                 html += '<div class="card"><div class="card-title">📊 ' + selectedPlayer.name + '</div>' +
                     '<div style="margin-bottom: 1.5rem;"><div style="font-size: 12px; font-weight: 600; color: #639922; margin-bottom: 0.75rem;">Abwehr / Paraden</div>' +
@@ -855,9 +832,112 @@
                     '</div></div>' +
                     '</div>';
             }
-
+            
+            // BETREUER STATS
+            if (selectedPlayer && selectedPlayer.isCoach) {
+                html += '<div class="card"><div class="card-title">📊 Betreuer ' + selectedPlayer.letter + '</div>' +
+                    '<div class="stat-buttons">' +
+                    '<button class="stat-btn minus" onclick="updateCoachStat(\'' + selectedPlayer.letter + '\', \'yellowCard\', 1)">🟡 Gelbe Karte</button>' +
+                    '<button class="stat-btn minus" onclick="updateCoachStat(\'' + selectedPlayer.letter + '\', \'twoMinute\', 1)">⏱️ 2min-Strafe</button>' +
+                    '<button class="stat-btn minus" onclick="updateCoachStat(\'' + selectedPlayer.letter + '\', \'redCard\', 1)">🔴 Rote Karte</button>' +
+                    '</div></div>';
+            }
+            
             html += '<div style="display: flex; gap: 1rem; margin-top: 2rem; flex-wrap: wrap;"><button class="btn btn-success" onclick="saveCurrentGame(); showToast(\'Gespeichert!\');" style="flex: 1; min-width: 120px;">💾 Speichern</button><button class="btn btn-primary" onclick="exportToPDF();" style="flex: 1; min-width: 120px;">📄 PDF</button><button class="btn btn-warning" onclick="finishGame();" style="flex: 1; min-width: 120px;">🏁 Beenden</button><button class="btn btn-info" onclick="openAddPlayerModal();" style="flex: 1; min-width: 120px;">➕ Spieler hinzufügen</button></div>';
+            
             container.innerHTML = html;
+        }
+
+        function selectPlayerFromGame(playerId) {
+            selectedPlayer = currentGame.players.find(p => p.id === playerId);
+        }
+
+        function selectCoach(letter) {
+            selectedPlayer = { letter: letter, isCoach: true };
+        }
+
+        function updateScore(change) {
+            currentGame.ownGoals += change;
+            if (currentGame.ownGoals < 0) currentGame.ownGoals = 0;
+            saveCurrentGame();
+            renderStats();
+        }
+
+        function changeOwnGoals() {
+            const newGoals = prompt('Neue Toranzahl für unser Team:');
+            if (newGoals !== null && !isNaN(newGoals)) {
+                currentGame.ownGoals = Math.max(0, parseInt(newGoals));
+                saveCurrentGame();
+                renderStats();
+            }
+        }
+
+        function toggleTimer() {
+            if (timerInterval) {
+                clearInterval(timerInterval);
+                timerInterval = null;
+            } else {
+                timerInterval = setInterval(() => {
+                    currentGame.timer++;
+                    renderStats();
+                }, 1000);
+            }
+        }
+
+        function resetTimer() {
+            if (timerInterval) {
+                clearInterval(timerInterval);
+                timerInterval = null;
+            }
+            currentGame.timer = 0;
+            renderStats();
+        }
+
+        function formatTime(seconds) {
+            const mins = Math.floor(seconds / 60);
+            const secs = seconds % 60;
+            return (mins < 10 ? '0' : '') + mins + ':' + (secs < 10 ? '0' : '') + secs;
+        }
+
+        function addTeamTimeout() {
+            if (currentGame.timeouts.total >= MAX_TIMEOUTS_TOTAL) {
+                showToast('❌ Maximale Anzahl Timeouts erreicht!');
+                return;
+            }
+            
+            const currentHalf = currentGame.period === 1 ? 'firstHalf' : 'secondHalf';
+            if (currentGame.timeouts[currentHalf] >= MAX_TIMEOUTS_HALFTIME) {
+                showToast('❌ Max ' + MAX_TIMEOUTS_HALFTIME + ' Timeouts pro Halbzeit!');
+                return;
+            }
+            
+            currentGame.timeouts.total++;
+            currentGame.timeouts[currentHalf]++;
+            saveCurrentGame();
+            renderStats();
+            showToast('⏸️ Team Timeout erfasst!');
+        }
+
+        function updateStat(playerId, statName, change) {
+            const player = currentGame.players.find(p => p.id === playerId);
+            if (!player) return;
+            
+            player[statName] = (player[statName] || 0) + change;
+            if (player[statName] < 0) player[statName] = 0;
+            
+            saveCurrentGame();
+            renderStats();
+        }
+
+        function updateCoachStat(letter, statName, change) {
+            const coach = currentGame.coaches.find(c => c.letter === letter);
+            if (!coach) return;
+            
+            coach[statName] = (coach[statName] || 0) + change;
+            if (coach[statName] < 0) coach[statName] = 0;
+            
+            saveCurrentGame();
+            renderStats();
         }
 
         function openAddPlayerModal() {
@@ -866,7 +946,6 @@
                 return;
             }
 
-            // Spieler die NICHT im aktuellen Spiel sind
             const usedPlayerIds = currentGame.players.map(p => p.id);
             const availablePlayers = players.filter(p => !usedPlayerIds.includes(p.id));
 
@@ -886,7 +965,6 @@
 
             const modal = document.getElementById('playerModal');
             if (!modal) {
-                // Modal erstellen falls nicht vorhanden
                 const newModal = document.createElement('div');
                 newModal.id = 'playerModal';
                 newModal.className = 'modal';
@@ -913,40 +991,29 @@
                 return;
             }
 
-            // Überprüfe ob Spieler bereits im Spiel ist
-            if (currentGame.players.find(p => p.id === playerId)) {
-                showToast('Spieler ist bereits im Spiel');
-                return;
-            }
-
-            // Füge Spieler zum Spiel hinzu
-            const isGK = player.is_goalkeeper || player.isGoalkeeper;
-            const newPlayer = {
-                id: player.id,
-                number: player.number,
-                name: player.name,
-                isGoalkeeper: isGK,
-                is_goalkeeper: isGK
-            };
-
-            // Initialisiere Stats
-            (isGK ? GK_STATS : FIELD_STATS).forEach(f => newPlayer[f] = 0);
-
-            currentGame.players.push(newPlayer);
+            const playerCopy = { ...player, goals: 0, goals7m: 0, assists: 0, turnovers: 0, missedShots: 0, missedShots7m: 0, technicalFouls: 0, yellowCard: 0, twoMinute: 0, redCard: 0, saved: 0, saved7m: 0, conceded: 0, conceded7m: 0 };
+            
+            currentGame.players.push(playerCopy);
             saveCurrentGame();
             renderStats();
             showToast('✓ ' + player.name + ' hinzugefügt!');
         }
 
         function finishGame() {
-            if (!currentGame) return;
-            currentGame.finished = true;
-            saveCurrentGame();
-            stopTimer();
-            renderAll();
-            showToast('✓ Spiel beendet!');
+            if (confirm('Spiel wirklich beenden?')) {
+                currentGame.finished = true;
+                saveCurrentGame();
+                games = games.map(g => g.id === currentGame.id ? currentGame : g);
+                currentGame = null;
+                selectedPlayer = null;
+                renderGames();
+                switchTab('games');
+            }
         }
 
+        // =====================================================
+        // ANALYSIS TAB
+        // =====================================================
         function renderAnalysis() {
             const container = document.getElementById('analysis');
             
@@ -956,44 +1023,60 @@
             }
 
             const fieldPlayers = currentGame.players.filter(p => !p.isGoalkeeper && !p.is_goalkeeper).sort((a, b) => calcPlusMinus(b) - calcPlusMinus(a));
-            const gks = currentGame.players.filter(p => p.isGoalkeeper || p.isGoalkeeper);
-            
-            let html = '<div class="card"><div class="card-title">📊 Feldspieler</div>';
-            html += '<div style="overflow-x: auto;"><table class="stats-table" style="font-size: 11px; white-space: nowrap;"><tr><th style="text-align: center;">Nr</th><th style="text-align: left;">Name</th><th style="text-align: center;">⚽</th><th style="text-align: center;">❌</th><th style="text-align: center;">Quo%</th><th style="text-align: center;">🤝</th><th style="text-align: center;">Eff%</th><th style="text-align: center;">🛑</th><th style="text-align: center;">±</th></tr>';
-            
-            fieldPlayers.forEach(p => {
-                const goals = (p.goals || 0) + (p.goals7m || 0);
-                const missedWurfs = (p.missedShots || 0) + (p.missedShots7m || 0);
-                const quotePercent = calcShootingQuote(p);
-                const effectivenessPercent = calcHandlingEffectiveness(p);
-                const plusMinus = calcPlusMinus(p);
-                
-                html += '<tr><td style="text-align: center;">' + p.number + '</td><td style="text-align: left;">' + p.name + '</td><td style="text-align: center;">' + goals + '</td><td style="text-align: center;">' + missedWurfs + '</td><td style="text-align: center;">' + quotePercent + '</td><td style="text-align: center;">' + (p.assists || 0) + '</td><td style="text-align: center;">' + effectivenessPercent + '</td><td style="text-align: center;">' + (p.technicalFouls || 0) + '</td><td style="text-align: center; color: ' + (plusMinus >= 0 ? '#639922' : '#e24b4a') + '; font-weight: bold;">' + (plusMinus >= 0 ? '+' : '') + plusMinus + '</td></tr>';
-            });
-            
-            html += '</table></div></div>';
+            const gks = currentGame.players.filter(p => p.isGoalkeeper || p.is_goalkeeper);
+
+            let html = '<div class="card"><div class="card-title">📊 Spielübersicht</div>';
+            html += '<div style="font-size: 14px; padding: 1rem 0;">';
+            html += '<strong>' + currentGame.opponent + '</strong><br>';
+            html += '<strong>Ergebnis:</strong> ' + currentGame.ownGoals + ':' + currentGame.opponentGoals + '<br>';
+            html += '<strong>Datum:</strong> ' + new Date(currentGame.date).toLocaleDateString('de-DE') + '<br>';
+            html += '<strong>Team Timeouts:</strong> ' + currentGame.timeouts.total + ' (1.HZ: ' + currentGame.timeouts.firstHalf + ', 2.HZ: ' + currentGame.timeouts.secondHalf + ')';
+            html += '</div></div>';
+
+            if (fieldPlayers.length > 0) {
+                html += '<div class="card"><div class="card-title">🏐 Feldspieler</div>';
+                html += '<div style="overflow-x: auto;"><table class="stats-table"><tr><th>Nr</th><th>Name</th><th>⚽</th><th>❌</th><th>%</th><th>🤝</th><th>±</th></tr>';
+                fieldPlayers.forEach(p => {
+                    const goals = (p.goals || 0) + (p.goals7m || 0);
+                    const missed = (p.missedShots || 0) + (p.missedShots7m || 0);
+                    const shootingQuote = (goals + missed) === 0 ? 0 : Math.round((goals / (goals + missed)) * 100);
+                    html += '<tr><td>' + p.number + '</td><td>' + p.name + '</td><td>' + goals + '</td><td>' + missed + '</td><td>' + shootingQuote + '%</td><td>' + (p.assists || 0) + '</td><td style="color: ' + (calcPlusMinus(p) >= 0 ? '#639922' : '#e24b4a') + '; font-weight: bold;">' + (calcPlusMinus(p) >= 0 ? '+' : '') + calcPlusMinus(p) + '</td></tr>';
+                });
+                html += '</table></div></div>';
+            }
 
             if (gks.length > 0) {
                 html += '<div class="card"><div class="card-title">🥅 Torwarte</div>';
-                html += '<div style="overflow-x: auto;"><table class="stats-table" style="font-size: 11px; white-space: nowrap;"><tr><th style="text-align: center;">Nr</th><th style="text-align: left;">Name</th><th style="text-align: center;">Parade</th><th style="text-align: center;">7m-Parade</th><th style="text-align: center;">Gegentor</th><th style="text-align: center;">7m-Gegentor</th><th style="text-align: center;">Quote</th><th style="text-align: center;">7m-Quote</th><th style="text-align: center;">🛑</th></tr>';
-                
+                html += '<div style="overflow-x: auto;"><table class="stats-table"><tr><th>Name</th><th>Feld-Par</th><th>7m-Par</th><th>Feld-Tor</th><th>7m-Tor</th><th>Quote</th></tr>';
                 gks.forEach(gk => {
-                    const fieldSaves = (gk.saved || 0);
-                    const sevenSaves = (gk.saved7m || 0);
-                    const fieldConceded = (gk.conceded || 0);
-                    const sevenConceded = (gk.conceded7m || 0);
-                    const fieldQuote = fieldConceded === 0 ? 0 : Math.round((fieldSaves / (fieldSaves + fieldConceded)) * 100);
-                    const sevenQuote = sevenConceded === 0 ? 0 : Math.round((sevenSaves / (sevenSaves + sevenConceded)) * 100);
-                    
-                    html += '<tr><td style="text-align: center;">TW ' + gk.number + '</td><td style="text-align: left;">' + gk.name + '</td><td style="text-align: center;">' + fieldSaves + '</td><td style="text-align: center;">' + sevenSaves + '</td><td style="text-align: center;">' + fieldConceded + '</td><td style="text-align: center;">' + sevenConceded + '</td><td style="text-align: center; color: #185fa5; font-weight: bold;">' + fieldQuote + '%</td><td style="text-align: center; color: #185fa5; font-weight: bold;">' + sevenQuote + '%</td><td style="text-align: center;">' + (gk.technicalFouls || 0) + '</td></tr>';
+                    const fieldSaves = gk.saved || 0;
+                    const sevenSaves = gk.saved7m || 0;
+                    const fieldConceded = gk.conceded || 0;
+                    const sevenConceded = gk.conceded7m || 0;
+                    const totalShots = fieldSaves + fieldConceded + sevenSaves + sevenConceded;
+                    const quote = totalShots === 0 ? 0 : Math.round(((fieldSaves + sevenSaves) / totalShots) * 100);
+                    html += '<tr><td>' + gk.name + '</td><td>' + fieldSaves + '</td><td>' + sevenSaves + '</td><td>' + fieldConceded + '</td><td>' + sevenConceded + '</td><td style="color: #185fa5; font-weight: bold;">' + quote + '%</td></tr>';
                 });
-                
                 html += '</table></div></div>';
             }
+
+            html += '<div class="card"><div class="card-title">👔 Betreuer Strafen</div>';
+            html += '<div style="overflow-x: auto;"><table class="stats-table"><tr><th>Betreuer</th><th>🟡 Gelb</th><th>⏱️ 2min</th><th>🔴 Rot</th></tr>';
+            currentGame.coaches.forEach(c => {
+                html += '<tr><td><strong>Betreuer ' + c.letter + '</strong></td><td>' + (c.yellowCard || 0) + '</td><td>' + (c.twoMinute || 0) + '</td><td>' + (c.redCard || 0) + '</td></tr>';
+            });
+            html += '</table></div></div>';
             
             container.innerHTML = html;
         }
 
+        function calcPlusMinus(player) {
+            return ((player.goals || 0) + (player.goals7m || 0)) - ((player.missedShots || 0) + (player.missedShots7m || 0));
+        }
+
+        // =====================================================
+        // SEASON TAB
+        // =====================================================
         function renderSeason() {
             const container = document.getElementById('season');
             
@@ -1002,7 +1085,6 @@
                 return;
             }
 
-            // Sammle alle Spieler-Statistiken über alle Spiele
             const playerStats = {};
             
             games.forEach(game => {
@@ -1054,7 +1136,7 @@
 
             let html = '<div class="card"><div class="card-title">📊 Saison-Übersicht</div>';
             html += '<div style="font-size: 12px; padding: 1rem 0;">';
-            html += '<strong>Gespiele Spiele:</strong> ' + games.length + '<br>';
+            html += '<strong>Gespielte Spiele:</strong> ' + games.length + '<br>';
             html += '<strong>Feldspieler:</strong> ' + fieldPlayers.length + '<br>';
             html += '<strong>Torwarte:</strong> ' + gks.length;
             html += '</div></div>';
@@ -1094,503 +1176,94 @@
             container.innerHTML = html;
         }
 
+        // =====================================================
+        // PLAYERS TAB
+        // =====================================================
         function renderPlayers() {
             const container = document.getElementById('players');
             
             const fieldPlayers = players.filter(p => !p.is_goalkeeper && !p.isGoalkeeper).sort((a, b) => a.number - b.number);
             const gks = players.filter(p => p.is_goalkeeper || p.isGoalkeeper).sort((a, b) => a.number - b.number);
 
-            let html = '<div class="card"><div class="card-title">🏐 Feldspieler</div>';
-            html += '<table class="stats-table"><tr><th>Nr</th><th>Name</th><th>Aktion</th></tr>';
-            
-            fieldPlayers.forEach(p => {
-                html += '<tr><td><input type="number" id="number_' + p.id + '" value="' + p.number + '" style="width: 50px; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px; text-align: center;"></td>' +
-                        '<td><input type="text" id="name_' + p.id + '" value="' + p.name + '" style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px;"></td>' +
-                        '<td><button class="btn btn-success" style="padding: 0.5rem 1rem; font-size: 11px; min-height: auto;" onclick="saveSinglePlayer(\'' + p.id + '\')">Speichern</button></td></tr>';
-            });
-            
-            html += '</table></div>';
+            let html = '<div class="card"><div class="card-title">➕ Neuer Spieler</div>';
+            html += '<div style="display: flex; gap: 0.5rem; flex-direction: column;">';
+            html += '<input type="number" class="form-input" placeholder="Rückennummer" id="playerNumber" min="1" max="99">';
+            html += '<input type="text" class="form-input" placeholder="Name" id="playerName">';
+            html += '<select class="form-input" id="playerRole"><option value="field">🏐 Feldspieler</option><option value="goalkeeper">🥅 Torwart</option></select>';
+            html += '<button class="btn btn-primary" onclick="createNewPlayer()">Hinzufügen</button>';
+            html += '</div></div>';
 
-            html += '<div class="card"><div class="card-title">🥅 Torwarte</div>';
-            html += '<table class="stats-table"><tr><th>Nr</th><th>Name</th><th>Aktion</th></tr>';
-            
-            gks.forEach(p => {
-                html += '<tr><td><input type="number" id="number_' + p.id + '" value="' + p.number + '" style="width: 50px; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px; text-align: center;"></td>' +
-                        '<td><input type="text" id="name_' + p.id + '" value="' + p.name + '" style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px;"></td>' +
-                        '<td><button class="btn btn-success" style="padding: 0.5rem 1rem; font-size: 11px; min-height: auto;" onclick="saveSinglePlayer(\'' + p.id + '\')">Speichern</button></td></tr>';
-            });
-            
-            html += '</table>';
-            html += '<button class="btn btn-primary" style="width: 100%; margin-top: 1rem;" onclick="saveAllPlayers()">💾 Alle Spieler speichern</button>';
-            html += '</div>';
-            
+            if (fieldPlayers.length > 0) {
+                html += '<div class="card"><div class="card-title">🏐 Feldspieler (' + fieldPlayers.length + ')</div>';
+                fieldPlayers.forEach(p => {
+                    html += '<div style="background: #f9f9f9; padding: 0.75rem; margin-bottom: 0.5rem; border-radius: 4px; display: flex; justify-content: space-between; align-items: center;"><div><strong>#' + p.number + '</strong> ' + p.name + '</div><button class="btn btn-danger" onclick="deletePlayer(\'' + p.id + '\')">🗑️</button></div>';
+                });
+                html += '</div>';
+            }
+
+            if (gks.length > 0) {
+                html += '<div class="card"><div class="card-title">🥅 Torwarte (' + gks.length + ')</div>';
+                gks.forEach(p => {
+                    html += '<div style="background: #fff8e1; padding: 0.75rem; margin-bottom: 0.5rem; border-radius: 4px; display: flex; justify-content: space-between; align-items: center;"><div><strong>TW #' + p.number + '</strong> ' + p.name + '</div><button class="btn btn-danger" onclick="deletePlayer(\'' + p.id + '\')">🗑️</button></div>';
+                });
+                html += '</div>';
+            }
+
             container.innerHTML = html;
         }
 
-        async function saveSinglePlayer(playerId) {
-            const nameInput = document.getElementById('name_' + playerId);
-            const numberInput = document.getElementById('number_' + playerId);
-            if (!nameInput || !numberInput) return;
-            
-            const newName = nameInput.value.trim();
-            const newNumber = parseInt(numberInput.value) || 1;
-            
-            if (!newName) {
-                showToast('Name darf nicht leer sein!');
+        function createNewPlayer() {
+            const number = document.getElementById('playerNumber').value;
+            const name = document.getElementById('playerName').value;
+            const role = document.getElementById('playerRole').value;
+
+            if (!number || !name) {
+                showToast('Bitte alle Felder ausfüllen');
                 return;
             }
 
-            const player = players.find(p => p.id === playerId);
-            if (!player) return;
-
-            player.name = newName;
-            player.number = newNumber;
-            
-            await saveToIDB('players', player);
-
-            if (isOnline) {
-                try {
-                    await window.sbClient.from('players').update({ name: newName, number: newNumber }).eq('id', playerId);
-                } catch (err) {
-                    console.log('Will sync when online');
-                }
-            }
-
-            showToast('✓ Spieler gespeichert!');
-        }
-
-        async function saveAllPlayers() {
-            let saved = 0;
-            
-            for (let player of players) {
-                const nameInput = document.getElementById('name_' + player.id);
-                const numberInput = document.getElementById('number_' + player.id);
-                if (!nameInput || !numberInput) continue;
-                
-                const newName = nameInput.value.trim();
-                const newNumber = parseInt(numberInput.value) || 1;
-                if (!newName) continue;
-
-                player.name = newName;
-                player.number = newNumber;
-                
-                await saveToIDB('players', player);
-
-                if (isOnline) {
-                    try {
-                        await window.sbClient.from('players').update({ name: newName, number: newNumber }).eq('id', player.id);
-                    } catch (err) {
-                        console.log('Will sync when online');
-                    }
-                }
-
-                saved++;
-            }
-
-            showToast('✓ ' + saved + ' Spieler gespeichert!');
-        }
-
-        // =====================================================
-        // GAME FUNCTIONS
-        // =====================================================
-        function openPlayerSelectionModal(mode) {
-            selectionMode = mode;
-            const isField = mode === 'field';
-            
-            // Filter players by goalkeeper status - use is_goalkeeper field
-            const availablePlayers = players.filter(p => {
-                const isGK = p.is_goalkeeper === true || p.isGoalkeeper === true; // Strictly check for true
-                console.log('Player', p.id, 'is_goalkeeper:', p.is_goalkeeper, 'isGoalkeeper:', p.isGoalkeeper, 'isGK:', isGK);
-                if (isField) {
-                    return !isGK; // Fielded players
-                } else {
-                    return isGK; // Goalkeepers only
-                }
-            });
-            
-            console.log('Available players for', mode, ':', availablePlayers.length, availablePlayers);
-
-            if (availablePlayers.length === 0) {
-                showToast('Keine ' + (isField ? 'Feldspieler' : 'Torwarte') + ' vorhanden!');
-                return;
-            }
-
-            document.getElementById('modalTitle').textContent = isField ? 'Feldspieler auswählen (max 16)' : 'Torwarte auswählen (max 3)';
-
-            let html = '';
-            availablePlayers.forEach(p => {
-                html += `<label class="checkbox-item">
-                    <input type="checkbox" value="${p.id}" onchange="updateSelectedCount()">
-                    <span>#${p.number} ${p.name}</span>
-                </label>`;
-            });
-
-            document.getElementById('playerCheckboxes').innerHTML = html;
-            updateSelectedCount();
-            document.getElementById('playerSelectionModal').classList.add('show');
-        }
-
-        function updateSelectedCount() {
-            const checked = document.querySelectorAll('#playerCheckboxes input:checked').length;
-            const max = selectionMode === 'field' ? 16 : 3;
-            document.getElementById('selectedCount').textContent = `${checked}/${max} ausgewählt`;
-        }
-
-        function confirmPlayerSelection() {
-            const selected = Array.from(document.querySelectorAll('#playerCheckboxes input:checked')).map(el => el.value);
-            
-            if (selected.length === 0) {
-                showToast(`Mindestens 1 ${selectionMode === 'field' ? 'Feldspieler' : 'Torwart'} erforderlich!`);
-                return;
-            }
-
-            if (selectionMode === 'field') {
-                tempFieldPlayers = selected;
-                closePlayerModal();
-                openPlayerSelectionModal('goalkeeper');
-            } else {
-                tempGoalkeepers = selected;
-                closePlayerModal();
-                createGameWithSelectedPlayers();
-            }
-        }
-
-        async function createGameWithSelectedPlayers() {
-            const opponent = document.getElementById('gameOpponent').value || 'Gegner';
-            const name = document.getElementById('gameName').value || 'Spiel ' + new Date().toLocaleDateString('de-DE');
-            const location = document.getElementById('gameLocation').value || '';
-            const league = document.getElementById('gameLeague').value || '';
-
-            const allSelectedIds = [...tempFieldPlayers, ...tempGoalkeepers];
-            
-            console.log('Creating game with players:', allSelectedIds);
-            console.log('Available players:', players);
-            
-            const newPlayers = players.filter(p => allSelectedIds.includes(p.id)).map(p => {
-                const isGK = p.is_goalkeeper || p.isGoalkeeper;
-                const s = { 
-                    id: p.id, 
-                    number: p.number, 
-                    name: p.name, 
-                    isGoalkeeper: isGK,
-                    is_goalkeeper: isGK
-                };
-                (isGK ? GK_STATS : FIELD_STATS).forEach(f => s[f] = 0);
-                return s;
-            });
-
-            console.log('New players for game:', newPlayers);
-
-            if (newPlayers.length === 0) {
-                showToast('Fehler beim Erstellen - Spieler nicht gefunden!');
-                return;
-            }
-
-            const gameId = 'g_' + currentUser.id.substring(0, 8) + '_' + Date.now();
-            const newGame = {
-                id: gameId,
+            const playerId = 'player_' + Date.now();
+            const newPlayer = {
+                id: playerId,
                 user_id: currentUser.id,
-                opponent,
-                name,
-                location,
-                league,
-                date: new Date().toISOString(),
-                players: newPlayers,
-                ownGoals: 0,
-                opponentGoals: 0,
-                startTime: null,
-                totalPausedMs: 0,
-                logs: [],
-                finished: false
+                number: parseInt(number),
+                name: name,
+                is_goalkeeper: role === 'goalkeeper',
+                isGoalkeeper: role === 'goalkeeper'
             };
 
-            console.log('Saving game:', newGame);
+            players.push(newPlayer);
+            saveToIDB('players', newPlayer);
 
-            // WICHTIG: Erst lokal speichern
-            await saveToIDB('games', newGame);
-            console.log('Game saved to IndexedDB');
-
-            // Dann zu Supabase hochladen - MIT ALLEN SPALTEN
             if (isOnline) {
-                try {
-                    console.log('Uploading to Supabase...');
-                    
-                    // Alle Spalten mit korrekten Snake_case Namen
-                    const gameForSupabase = {
-                        id: newGame.id,
-                        user_id: newGame.user_id,
-                        opponent: newGame.opponent,
-                        name: newGame.name,
-                        location: newGame.location,
-                        league: newGame.league,
-                        date: newGame.date,
-                        players: newGame.players,
-                        own_goals: newGame.ownGoals,
-                        opponent_goals: newGame.opponentGoals,
-                        start_time: newGame.startTime,
-                        total_paused_ms: newGame.totalPausedMs || 0,
-                        logs: newGame.logs || [],
-                        finished: newGame.finished || false
-                    };
-                    
-                    const { data, error } = await window.sbClient.from('games').insert([gameForSupabase]);
-                    
-                    if (error) {
-                        console.error('Supabase INSERT error:', error);
-                        showToast('⚠️ Spiel lokal gespeichert, Cloud-Sync später');
-                    } else {
-                        console.log('Game successfully inserted into Supabase:', data);
-                        showToast('✓ Spiel synced!');
-                    }
-                } catch (err) {
-                    console.error('Exception during Supabase upload:', err);
-                    showToast('⚠️ Lokal gespeichert, Cloud-Sync später');
-                }
-            } else {
-                showToast('📱 Offline - Spiel wird später synced');
+                window.sbClient.from('players').insert([newPlayer]).catch(err => console.error('Insert error:', err));
             }
 
-            games.push(newGame);
-            currentGame = newGame;
-            tempFieldPlayers = [];
-            tempGoalkeepers = [];
+            document.getElementById('playerNumber').value = '';
+            document.getElementById('playerName').value = '';
+            document.getElementById('playerRole').value = 'field';
+
+            renderPlayers();
+            showToast('✓ ' + name + ' hinzugefügt!');
+        }
+
+        function deletePlayer(playerId) {
+            if (!confirm('Spieler wirklich löschen?')) return;
+
+            players = players.filter(p => p.id !== playerId);
             
-            document.getElementById('gameOpponent').value = '';
-            document.getElementById('gameName').value = '';
-            document.getElementById('gameLocation').value = '';
-            document.getElementById('gameLeague').value = '';
-            
-            renderAll();
-            console.log('Game creation complete');
-        }
-
-        function closePlayerModal() {
-            document.getElementById('playerSelectionModal').classList.remove('show');
-        }
-
-        function selectGame(gameId) {
-            stopTimer();
-            currentGame = games.find(g => g.id === gameId);
-            selectedPlayer = null;
-            document.querySelector('[onclick="switchTab(\'stats\')"]').click();
-        }
-
-        function selectPlayerFromGame(playerId) {
-            if (!currentGame) return;
-            const player = currentGame.players.find(x => x.id === playerId);
-            if (!player) {
-                console.error('Player not found:', playerId);
-                return;
+            if (db) {
+                const transaction = db.transaction(['players'], 'readwrite');
+                const store = transaction.objectStore('players');
+                store.delete(playerId);
             }
-            selectedPlayer = player;
-            console.log('Selected player:', selectedPlayer);
-        }
-
-        async function deleteGame(gameId) {
-            if (!confirm('Spiel wirklich löschen?')) return;
 
             if (isOnline) {
-                try {
-                    console.log('Deleting game from Supabase:', gameId);
-                    const { error } = await window.sbClient
-                        .from('games')
-                        .delete()
-                        .eq('id', gameId)
-                        .eq('user_id', currentUser.id);
-                    
-                    if (error) {
-                        console.error('Delete error:', error);
-                        showToast('⚠️ Fehler beim Cloud-Löschen');
-                    } else {
-                        console.log('Game deleted from Supabase');
-                    }
-                } catch (err) {
-                    console.error('Delete exception:', err);
-                    showToast('⚠️ Fehler beim Löschen');
-                }
+                window.sbClient.from('players').delete().eq('id', playerId).catch(err => console.error('Delete error:', err));
             }
 
-            await deleteFromIDB('games', gameId);
-            games = games.filter(g => g.id !== gameId);
-            if (currentGame?.id === gameId) {
-                currentGame = null;
-                selectedPlayer = null;
-            }
-            renderAll();
-            showToast('✓ Spiel gelöscht!');
-        }
-
-        async function saveCurrentGame() {
-            if (!currentGame) return;
-
-            if (!currentGame.user_id) {
-                currentGame.user_id = currentUser.id;
-            }
-
-            console.log('Saving game to IDB:', currentGame.id);
-            await saveToIDB('games', currentGame);
-
-            if (isOnline) {
-                try {
-                    // Alle Spalten mit korrekten Snake_case Namen
-                    const gameForSupabase = {
-                        id: currentGame.id,
-                        user_id: currentGame.user_id,
-                        opponent: currentGame.opponent,
-                        name: currentGame.name,
-                        location: currentGame.location,
-                        league: currentGame.league,
-                        date: currentGame.date,
-                        players: currentGame.players,
-                        own_goals: currentGame.ownGoals,
-                        opponent_goals: currentGame.opponentGoals,
-                        start_time: currentGame.startTime,
-                        total_paused_ms: currentGame.totalPausedMs || 0,
-                        logs: currentGame.logs || [],
-                        finished: currentGame.finished || false
-                    };
-                    
-                    const existing = await window.sbClient
-                        .from('games')
-                        .select('id')
-                        .eq('id', currentGame.id)
-                        .eq('user_id', currentUser.id);
-
-                    if (existing.data && existing.data.length > 0) {
-                        const { error: updateError } = await window.sbClient
-                            .from('games')
-                            .update(gameForSupabase)
-                            .eq('id', currentGame.id)
-                            .eq('user_id', currentUser.id);
-                        
-                        if (updateError) {
-                            console.error('Update error:', updateError);
-                        } else {
-                            console.log('Game synced to Supabase');
-                        }
-                    } else {
-                        const { error: insertError } = await window.sbClient
-                            .from('games')
-                            .insert([gameForSupabase]);
-                        
-                        if (insertError) {
-                            console.error('Insert error:', insertError);
-                        } else {
-                            console.log('Game synced to Supabase');
-                        }
-                    }
-                } catch (err) {
-                    console.error('Sync error:', err);
-                }
-            }
-        }
-
-        // =====================================================
-        // STATISTICS
-        // =====================================================
-        function calcPlusMinus(stats) {
-            const pos = (stats.goals || 0) + (stats.goals7m || 0) + (stats.assists || 0) + (stats.saved || 0) + (stats.saved7m || 0);
-            const neg = (stats.turnovers || 0) + (stats.yellowCard || 0) + (stats.twoMinute || 0) + (stats.redCard || 0) + (stats.missedShots || 0) + (stats.missedShots7m || 0) + (stats.missedPasses || 0) + (stats.technicalFouls || 0) + (stats.oneOnOneContra || 0) + (stats.conceded || 0) + (stats.conceded7m || 0);
-            return pos - neg;
-        }
-
-        function calcHandlingEffectiveness(stats) {
-            const successful = (stats.goals || 0) + (stats.goals7m || 0) + (stats.assists || 0);
-            const total = successful + (stats.missedShots || 0) + (stats.missedShots7m || 0) + (stats.missedPasses || 0) + (stats.turnovers || 0);
-            return total === 0 ? 0 : Math.round((successful / total) * 100);
-        }
-
-        function calcShootingQuote(stats) {
-            const shots = (stats.goals || 0) + (stats.goals7m || 0) + (stats.missedShots || 0) + (stats.missedShots7m || 0);
-            const goals = (stats.goals || 0) + (stats.goals7m || 0);
-            return shots === 0 ? 0 : Math.round((goals / shots) * 100);
-        }
-
-        function updateStat(playerId, stat, delta) {
-            if (!currentGame) return;
-            const p = currentGame.players.find(x => x.id === playerId);
-            if (!p) return;
-            p[stat] = Math.max(0, (p[stat] || 0) + delta);
-
-            if (stat === 'goals' || stat === 'goals7m') {
-                currentGame.ownGoals = currentGame.players.reduce((s, pl) => s + (pl.goals || 0) + (pl.goals7m || 0), 0);
-            }
-            if (stat === 'conceded' || stat === 'conceded7m') {
-                currentGame.opponentGoals = currentGame.players.reduce((s, pl) => s + (pl.conceded || 0) + (pl.conceded7m || 0), 0);
-            }
-
-            if (!currentGame.logs) currentGame.logs = [];
-            const statName = { 'goals': '⚽ Feld', 'goals7m': '🎯 7m', 'assists': '🤝 Pass', 'turnovers': '💔 Fehler', 'conceded': '📥 Feldtor', 'conceded7m': '📥 7m-Tor', 'yellowCard': '🟡 Gelb', 'twoMinute': '⏱️ 2min', 'redCard': '🔴 Rot', 'saved': '🛡️ Feldtor', 'saved7m': '🎯 7m-Tor', 'missedShots': '❌ Fehlwurf', 'missedShots7m': '❌ Fehlwurf 7m', 'technicalFouls': '🛑 Tech. Fehler' }[stat] || stat;
-            currentGame.logs.unshift({
-                time: formatTime(getElapsedSeconds()),
-                number: p.number,
-                name: p.name,
-                action: statName
-            });
-            if (currentGame.logs.length > 3) currentGame.logs.pop();
-
-            renderStats();
-            saveCurrentGame();
-        }
-
-        function updateGameScore(own, opp) {
-            if (!currentGame) return;
-            currentGame.ownGoals = Math.max(0, parseInt(own) || 0);
-            currentGame.opponentGoals = Math.max(0, parseInt(opp) || 0);
-            saveCurrentGame();
-            showToast('⚽ ' + currentGame.ownGoals + ':' + currentGame.opponentGoals);
-        }
-
-        // =====================================================
-        // TIMER
-        // =====================================================
-        function toggleTimer() {
-            if (!currentGame) return;
-            if (timerInterval) {
-                // PAUSE - aktuelle Zeit speichern
-                currentGame.pausedAt = Date.now();
-                stopTimer();
-            } else {
-                // RESUME - berechne wie lange pausiert wurde
-                if (!currentGame.startTime) {
-                    currentGame.startTime = Date.now();
-                    currentGame.totalPausedMs = 0;
-                } else if (currentGame.pausedAt) {
-                    // Addiere die Pause-Zeit zur Gesamt-Pause-Zeit
-                    const pauseDuration = Date.now() - currentGame.pausedAt;
-                    currentGame.totalPausedMs = (currentGame.totalPausedMs || 0) + pauseDuration;
-                }
-                currentGame.pausedAt = null;
-                startTimer();
-            }
-            saveCurrentGame();
-            renderStats();
-        }
-
-        function getElapsedSeconds() {
-            if (!currentGame || !currentGame.startTime) return 0;
-            const now = Date.now();
-            const totalElapsed = now - currentGame.startTime;
-            const totalPaused = currentGame.totalPausedMs || 0;
-            return Math.floor((totalElapsed - totalPaused) / 1000);
-        }
-
-        function startTimer() {
-            if (timerInterval || !currentGame) return;
-            timerInterval = setInterval(() => renderStats(), 1000);
-        }
-
-        function stopTimer() {
-            if (timerInterval) {
-                clearInterval(timerInterval);
-                timerInterval = null;
-            }
-        }
-
-        function formatTime(seconds) {
-            const mins = Math.floor(seconds / 60);
-            const secs = seconds % 60;
-            return (mins < 10 ? '0' : '') + mins + ':' + (secs < 10 ? '0' : '') + secs;
+            renderPlayers();
+            showToast('✓ Spieler gelöscht!');
         }
 
         // =====================================================
@@ -1602,7 +1275,6 @@
                 return;
             }
 
-            // Markiere Spiel als beendet
             currentGame.finished = true;
             saveCurrentGame();
 
@@ -1615,17 +1287,18 @@
             htmlContent += '<p style="margin: 5px;"><strong>Spiel:</strong> ' + currentGame.opponent + '</p>';
             htmlContent += '<p style="margin: 5px;"><strong>Datum:</strong> ' + new Date(currentGame.date).toLocaleDateString('de-DE') + '</p>';
             htmlContent += '<p style="margin: 5px;"><strong>Ergebnis:</strong> ' + currentGame.ownGoals + ':' + currentGame.opponentGoals + '</p>';
-            if (currentGame.location) htmlContent += '<p style="margin: 5px;"><strong>Ort:</strong> ' + currentGame.location + '</p>';
+            htmlContent += '<p style="margin: 5px;"><strong>Team Timeouts:</strong> ' + currentGame.timeouts.total + ' (1.HZ: ' + currentGame.timeouts.firstHalf + ', 2.HZ: ' + currentGame.timeouts.secondHalf + ')</p>';
             htmlContent += '</div>';
 
             if (fieldPlayers.length > 0) {
                 htmlContent += '<h2 style="color: #185fa5;">🏐 Feldspieler</h2>';
                 htmlContent += '<table style="width: 100%; border-collapse: collapse; font-size: 11px;">';
-                htmlContent += '<tr style="background: #f5f5f5;"><th style="border: 1px solid #ddd; padding: 6px;">Nr</th><th style="border: 1px solid #ddd; padding: 6px;">Name</th><th style="border: 1px solid #ddd; padding: 6px;">⚽</th><th style="border: 1px solid #ddd; padding: 6px;">❌</th><th style="border: 1px solid #ddd; padding: 6px;">%</th><th style="border: 1px solid #ddd; padding: 6px;">🤝</th><th style="border: 1px solid #ddd; padding: 6px;">E%</th><th style="border: 1px solid #ddd; padding: 6px;">±</th></tr>';
+                htmlContent += '<tr style="background: #f5f5f5;"><th style="border: 1px solid #ddd; padding: 6px;">Nr</th><th style="border: 1px solid #ddd; padding: 6px;">Name</th><th style="border: 1px solid #ddd; padding: 6px;">⚽</th><th style="border: 1px solid #ddd; padding: 6px;">❌</th><th style="border: 1px solid #ddd; padding: 6px;">%</th><th style="border: 1px solid #ddd; padding: 6px;">🤝</th><th style="border: 1px solid #ddd; padding: 6px;">±</th></tr>';
                 fieldPlayers.forEach(p => {
                     const goals = (p.goals || 0) + (p.goals7m || 0);
                     const missed = (p.missedShots || 0) + (p.missedShots7m || 0);
-                    htmlContent += '<tr><td style="border: 1px solid #ddd; padding: 6px;">' + p.number + '</td><td style="border: 1px solid #ddd; padding: 6px;">' + p.name + '</td><td style="border: 1px solid #ddd; padding: 6px; text-align: center;">' + goals + '</td><td style="border: 1px solid #ddd; padding: 6px; text-align: center;">' + missed + '</td><td style="border: 1px solid #ddd; padding: 6px; text-align: center;">' + calcShootingQuote(p) + '</td><td style="border: 1px solid #ddd; padding: 6px; text-align: center;">' + (p.assists || 0) + '</td><td style="border: 1px solid #ddd; padding: 6px; text-align: center;">' + calcHandlingEffectiveness(p) + '</td><td style="border: 1px solid #ddd; padding: 6px; text-align: center; color: ' + (calcPlusMinus(p) >= 0 ? '#639922' : '#e24b4a') + '; font-weight: bold;">' + (calcPlusMinus(p) >= 0 ? '+' : '') + calcPlusMinus(p) + '</td></tr>';
+                    const shootingQuote = (goals + missed) === 0 ? 0 : Math.round((goals / (goals + missed)) * 100);
+                    htmlContent += '<tr><td style="border: 1px solid #ddd; padding: 6px;">' + p.number + '</td><td style="border: 1px solid #ddd; padding: 6px;">' + p.name + '</td><td style="border: 1px solid #ddd; padding: 6px; text-align: center;">' + goals + '</td><td style="border: 1px solid #ddd; padding: 6px; text-align: center;">' + missed + '</td><td style="border: 1px solid #ddd; padding: 6px; text-align: center;">' + shootingQuote + '%</td><td style="border: 1px solid #ddd; padding: 6px; text-align: center;">' + (p.assists || 0) + '</td><td style="border: 1px solid #ddd; padding: 6px; text-align: center; color: ' + (calcPlusMinus(p) >= 0 ? '#639922' : '#e24b4a') + '; font-weight: bold;">' + (calcPlusMinus(p) >= 0 ? '+' : '') + calcPlusMinus(p) + '</td></tr>';
                 });
                 htmlContent += '</table>';
             }
@@ -1639,9 +1312,19 @@
                     const sevenSaves = (gk.saved7m || 0);
                     const fieldConceded = (gk.conceded || 0);
                     const sevenConceded = (gk.conceded7m || 0);
-                    const fieldQuote = fieldConceded === 0 ? 0 : Math.round((fieldSaves / (fieldSaves + fieldConceded)) * 100);
-                    const sevenQuote = sevenConceded === 0 ? 0 : Math.round((sevenSaves / (sevenSaves + sevenConceded)) * 100);
-                    htmlContent += '<tr><td style="border: 1px solid #ddd; padding: 6px;">' + gk.name + '</td><td style="border: 1px solid #ddd; padding: 6px; text-align: center;">' + fieldSaves + '</td><td style="border: 1px solid #ddd; padding: 6px; text-align: center;">' + sevenSaves + '</td><td style="border: 1px solid #ddd; padding: 6px; text-align: center;">' + fieldConceded + '</td><td style="border: 1px solid #ddd; padding: 6px; text-align: center;">' + sevenConceded + '</td><td style="border: 1px solid #ddd; padding: 6px; text-align: center; color: #185fa5; font-weight: bold;">' + fieldQuote + '%/' + sevenQuote + '%</td></tr>';
+                    const totalShots = fieldSaves + fieldConceded + sevenSaves + sevenConceded;
+                    const quote = totalShots === 0 ? 0 : Math.round(((fieldSaves + sevenSaves) / totalShots) * 100);
+                    htmlContent += '<tr><td style="border: 1px solid #ddd; padding: 6px;">' + gk.name + '</td><td style="border: 1px solid #ddd; padding: 6px; text-align: center;">' + fieldSaves + '</td><td style="border: 1px solid #ddd; padding: 6px; text-align: center;">' + sevenSaves + '</td><td style="border: 1px solid #ddd; padding: 6px; text-align: center;">' + fieldConceded + '</td><td style="border: 1px solid #ddd; padding: 6px; text-align: center;">' + sevenConceded + '</td><td style="border: 1px solid #ddd; padding: 6px; text-align: center; color: #185fa5; font-weight: bold;">' + quote + '%</td></tr>';
+                });
+                htmlContent += '</table>';
+            }
+
+            if (currentGame.coaches.some(c => c.yellowCard || c.twoMinute || c.redCard)) {
+                htmlContent += '<h2 style="color: #185fa5;">👔 Betreuer Strafen</h2>';
+                htmlContent += '<table style="width: 100%; border-collapse: collapse; font-size: 11px;">';
+                htmlContent += '<tr style="background: #f5f5f5;"><th style="border: 1px solid #ddd; padding: 6px;">Betreuer</th><th style="border: 1px solid #ddd; padding: 6px;">🟡 Gelb</th><th style="border: 1px solid #ddd; padding: 6px;">⏱️ 2min</th><th style="border: 1px solid #ddd; padding: 6px;">🔴 Rot</th></tr>';
+                currentGame.coaches.forEach(c => {
+                    htmlContent += '<tr><td style="border: 1px solid #ddd; padding: 6px;"><strong>Betreuer ' + c.letter + '</strong></td><td style="border: 1px solid #ddd; padding: 6px; text-align: center;">' + (c.yellowCard || 0) + '</td><td style="border: 1px solid #ddd; padding: 6px; text-align: center;">' + (c.twoMinute || 0) + '</td><td style="border: 1px solid #ddd; padding: 6px; text-align: center;">' + (c.redCard || 0) + '</td></tr>';
                 });
                 htmlContent += '</table>';
             }
@@ -1685,10 +1368,15 @@
 
         async function syncData() {
             if (!isOnline) return;
-            // Auto-sync current game
             if (currentGame) {
                 await saveCurrentGame();
             }
+        }
+
+        function clearDebugLogs() {
+            debugLogs = [];
+            document.getElementById('debugOutput').textContent = '';
+            showToast('Logs gelöscht');
         }
     </script>
 </body>

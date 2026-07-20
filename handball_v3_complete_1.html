@@ -574,6 +574,8 @@
                     league: dbGame.league || '',
                     date: dbGame.date,
                     players: dbGame.players || [],
+                    coaches: dbGame.coaches || COACHES.map(c => ({ letter: c, name: 'Betreuer ' + c, yellowCard: 0, twoMinute: 0, redCard: 0 })),
+                    timeouts: dbGame.timeouts || { total: 0, firstHalf: 0, secondHalf: 0 },
                     ownGoals: dbGame.own_goals !== undefined ? dbGame.own_goals : 0,
                     opponentGoals: dbGame.opponent_goals !== undefined ? dbGame.opponent_goals : 0,
                     startTime: dbGame.start_time,
@@ -634,6 +636,28 @@
 
                 console.log('Players loaded:', players.length);
 
+                // Load coaches
+                const { data: coachesData, error: coachesError } = await window.sbClient
+                    .from('coaches')
+                    .select('*')
+                    .eq('user_id', currentUser.id);
+
+                if (!coachesError && coachesData) {
+                    coaches = coachesData;
+                    for (let coach of coaches) {
+                        await saveToIDB('coaches', coach);
+                    }
+                } else {
+                    // Default coaches wenn keine vorhanden
+                    coaches = COACHES.map(letter => ({
+                        letter: letter,
+                        name: 'Betreuer ' + letter,
+                        user_id: currentUser.id
+                    }));
+                }
+
+                console.log('Coaches loaded:', coaches.length);
+
                 // Save to IndexedDB
                 for (let player of players) {
                     await saveToIDB('players', player);
@@ -667,6 +691,11 @@
         async function loadFromIDB() {
             games = await getAllFromIDB('games');
             players = await getAllFromIDB('players');
+            coaches = await getAllFromIDB('coaches') || COACHES.map(letter => ({
+                letter: letter,
+                name: 'Betreuer ' + letter,
+                user_id: currentUser.id
+            }));
         }
 
         // =====================================================
@@ -1367,12 +1396,16 @@
                 league,
                 date: new Date().toISOString(),
                 players: newPlayers,
-                coaches: COACHES.map(c => ({
-                    letter: c,
-                    yellowCard: 0,
-                    twoMinute: 0,
-                    redCard: 0
-                })),
+                coaches: COACHES.map(letter => {
+                    const coachData = coaches.find(c => c.letter === letter);
+                    return {
+                        letter: letter,
+                        name: coachData ? coachData.name : 'Betreuer ' + letter,
+                        yellowCard: 0,
+                        twoMinute: 0,
+                        redCard: 0
+                    };
+                }),
                 timeouts: {
                     total: 0,
                     firstHalf: 0,
@@ -1526,6 +1559,8 @@
                         league: currentGame.league,
                         date: currentGame.date,
                         players: currentGame.players,
+                        coaches: currentGame.coaches || [],
+                        timeouts: currentGame.timeouts || { total: 0, firstHalf: 0, secondHalf: 0 },
                         own_goals: currentGame.ownGoals,
                         opponent_goals: currentGame.opponentGoals,
                         start_time: currentGame.startTime,
@@ -1679,7 +1714,7 @@
 
             let coach = coaches.find(c => c.letter === letter);
             if (!coach) {
-                coach = { letter: letter, name: newName };
+                coach = { letter: letter, name: newName, user_id: currentUser.id };
                 coaches.push(coach);
             } else {
                 coach.name = newName;
@@ -1690,9 +1725,9 @@
             if (isOnline) {
                 try {
                     if (coach.id) {
-                        window.sbClient.from('coaches').update({ name: newName }).eq('id', coach.id);
+                        window.sbClient.from('coaches').update({ name: newName }).eq('id', coach.id).catch(err => console.error('Update coach error:', err));
                     } else {
-                        window.sbClient.from('coaches').insert([{ letter: letter, user_id: currentUser.id, name: newName }]);
+                        window.sbClient.from('coaches').insert([{ letter: letter, user_id: currentUser.id, name: newName }]).catch(err => console.error('Insert coach error:', err));
                     }
                 } catch (err) {
                     console.log('Will sync when online');

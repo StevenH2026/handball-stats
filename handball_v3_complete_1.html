@@ -1900,8 +1900,8 @@
                         start_time: currentGame.startTime,
                         total_paused_ms: currentGame.totalPausedMs || 0,
                         logs: currentGame.logs || [],
-                        finished: currentGame.finished || false,
-                        last_modified: currentGame.lastModified  // Für Merge-Strategie
+                        finished: currentGame.finished || false
+                        // last_modified ist optional - wird von DB auto gesetzt wenn nötig
                     };
                     
                     const existing = await window.sbClient
@@ -1921,7 +1921,18 @@
                         if (updateError) {
                             console.error('❌ Update error:', updateError.message);
                             console.error('Details:', updateError.details);
-                            showToast('⚠️ Update fehlgeschlagen');
+                            console.error('Code:', updateError.code);
+                            console.error('Full error:', updateError);
+                            
+                            let errorMsg = '❌ Update fehlgeschlagen';
+                            if (updateError.message.includes('permission') || updateError.code === 'PGRST301') {
+                                errorMsg = '❌ RLS: Du darfst nicht schreiben! Check Supabase RLS Policies.';
+                            } else if (updateError.message.includes('column')) {
+                                errorMsg = '❌ Spalten-Fehler: ' + updateError.message;
+                            } else {
+                                errorMsg = '❌ ' + updateError.message;
+                            }
+                            showToast(errorMsg);
                         } else {
                             console.log('✅ Game updated on Supabase');
                         }
@@ -1934,7 +1945,18 @@
                         if (insertError) {
                             console.error('❌ Insert error:', insertError.message);
                             console.error('Details:', insertError.details);
-                            showToast('⚠️ Insert fehlgeschlagen');
+                            console.error('Code:', insertError.code);
+                            console.error('Full error:', insertError);
+                            
+                            let errorMsg = '❌ Insert fehlgeschlagen';
+                            if (insertError.message.includes('permission') || insertError.code === 'PGRST301') {
+                                errorMsg = '❌ RLS: Du darfst nicht schreiben! Check Supabase RLS Policies.';
+                            } else if (insertError.message.includes('column')) {
+                                errorMsg = '❌ Spalten-Fehler: ' + insertError.message;
+                            } else {
+                                errorMsg = '❌ ' + insertError.message;
+                            }
+                            showToast(errorMsg);
                         } else {
                             console.log('✅ Game inserted to Supabase');
                         }

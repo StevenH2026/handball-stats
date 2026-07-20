@@ -965,13 +965,26 @@
                 return;
             }
 
+            // LIVE DEBUG PANEL - hilft auf Tablet zu sehen was passiert
+            const lastRefreshMs = lastAutoRefresh ? (Date.now() - lastAutoRefresh) : null;
+            const lastRefreshSec = lastRefreshMs ? Math.round(lastRefreshMs / 1000) : '?';
+            let debugPanel = '<div class="card" style="background: #f0f8ff; border-left: 4px solid #2196F3; font-size: 12px; margin-bottom: 1rem;">' +
+                '<div style="display: flex; justify-content: space-between; align-items: center;">' +
+                '<div>' +
+                '<span style="margin-right: 1rem;">🔄 Poll: ' + autoRefreshCounter + 'x</span>' +
+                '<span style="margin-right: 1rem;">⏱️ Letzte: ' + lastRefreshSec + 's</span>' +
+                '<span>📡 ' + (isOnline ? '🟢' : '🔴') + '</span>' +
+                '</div>' +
+                '<button class="btn btn-small" onclick="autoRefreshGames()" style="padding: 0.3rem 0.8rem; font-size: 11px;">🔄 Jetzt laden</button>' +
+                '</div></div>';
+            
             const fieldPlayers = currentGame.players.filter(p => !p.isGoalkeeper && !p.is_goalkeeper);
             const gks = currentGame.players.filter(p => p.isGoalkeeper || p.is_goalkeeper);
             const elapsed = getElapsedSeconds();
             const isHalftime = elapsed >= 1800;
             const isRunning = timerInterval !== null;
 
-            let html = '<div class="scoreboard-sticky">' +
+            let html = debugPanel + '<div class="scoreboard-sticky">' +
                 '<div style="font-size: 12px; margin-bottom: 0.5rem;">' + currentGame.opponent + ' • ' + currentGame.players.length + ' Spieler</div>' +
                 '<div class="timer">' + formatTime(elapsed) + (isHalftime ? ' <span class="halftime-badge">HALBZEIT</span>' : '') + '</div>' +
                 '<div class="timer-buttons">' +

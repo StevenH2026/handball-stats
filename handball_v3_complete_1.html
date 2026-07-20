@@ -791,6 +791,15 @@
                 '<button class="btn btn-primary" onclick="openPlayerSelectionModal(\'field\')" style="width: 100%;">🆕 Spiel starten - Spieler auswählen</button>' +
                 '</div>';
 
+            // Status und Sync-Button
+            let statusHTML = '<div class="card" style="background: #f5f5f5; border-left: 4px solid ' + (isOnline ? '#4CAF50' : '#ff9800') + ';">' +
+                '<div style="display: flex; justify-content: space-between; align-items: center;">' +
+                '<div style="font-weight: bold;">' + (isOnline ? '🟢 Online' : '🔴 Offline') + ' | ' + games.length + ' Spiele lokal</div>' +
+                '<button class="btn btn-info" onclick="manualSyncAllGames()" style="padding: 0.5rem 1rem;">🔄 Alle Spiele Sync</button>' +
+                '</div></div>';
+            
+            container.innerHTML += statusHTML;
+
             if (games.length > 0) {
                 container.innerHTML += '<div class="card"><div class="card-title">📋 Spiele (' + games.length + ')</div>' + 
                     games.map(g => {
@@ -1183,10 +1192,24 @@
         function renderPlayers() {
             const container = document.getElementById('players');
             
+            // DEBUG-SEKTION - oben hinzufügen
+            let html = '<div class="card" style="background: #fff9e6; border-left: 4px solid #ff9800;">' +
+                '<div class="card-title" style="color: #ff9800; margin-bottom: 1rem;">🔧 Debug-Info</div>' +
+                '<table style="width: 100%; font-size: 12px; border-collapse: collapse;">' +
+                '<tr><td style="padding: 0.5rem; border-bottom: 1px solid #ddd;"><strong>Authentifiziert:</strong></td><td style="padding: 0.5rem; border-bottom: 1px solid #ddd;">' + (currentUser ? '✅ ' + (currentUser.email || currentUser.id) : '❌ Nicht angemeldet') + '</td></tr>' +
+                '<tr><td style="padding: 0.5rem; border-bottom: 1px solid #ddd;"><strong>Online:</strong></td><td style="padding: 0.5rem; border-bottom: 1px solid #ddd;">' + (isOnline ? '🟢 Ja' : '🔴 Nein') + '</td></tr>' +
+                '<tr><td style="padding: 0.5rem; border-bottom: 1px solid #ddd;"><strong>Supabase Client:</strong></td><td style="padding: 0.5rem; border-bottom: 1px solid #ddd;">' + (window.sbClient ? '✅ Initialisiert' : '❌ Fehler') + '</td></tr>' +
+                '<tr><td style="padding: 0.5rem; border-bottom: 1px solid #ddd;"><strong>IndexedDB:</strong></td><td style="padding: 0.5rem; border-bottom: 1px solid #ddd;">' + (db ? '✅ Bereit' : '❌ Fehler') + '</td></tr>' +
+                '<tr><td style="padding: 0.5rem;"><strong>Lokale Spiele:</strong></td><td style="padding: 0.5rem;">' + games.length + '</td></tr>' +
+                '</table>' +
+                '<button class="btn btn-info" onclick="testSupabaseConnection()" style="width: 100%; margin-top: 1rem;">🧪 Supabase-Verbindung testen</button>' +
+                '</div>';
+            
+            // SPIELER TABELLEN
             const fieldPlayers = players.filter(p => !p.is_goalkeeper && !p.isGoalkeeper).sort((a, b) => a.number - b.number);
             const gks = players.filter(p => p.is_goalkeeper || p.isGoalkeeper).sort((a, b) => a.number - b.number);
 
-            let html = '<div class="card"><div class="card-title">🏐 Feldspieler</div>';
+            html += '<div class="card"><div class="card-title">🏐 Feldspieler</div>';
             html += '<table class="stats-table"><tr><th>Nr</th><th>Name</th><th>Aktion</th></tr>';
             
             fieldPlayers.forEach(p => {
@@ -1429,6 +1452,13 @@
             if (isOnline) {
                 try {
                     console.log('Uploading to Supabase...');
+                    console.log('Current user:', currentUser);
+                    console.log('User ID:', currentUser?.id);
+                    
+                    if (!currentUser || !currentUser.id) {
+                        showToast('❌ Nicht angemeldet! Bitte neu laden.');
+                        return;
+                    }
                     
                     // Alle Spalten mit korrekten Snake_case Namen
                     const gameForSupabase = {
@@ -1450,18 +1480,22 @@
                         finished: newGame.finished || false
                     };
                     
+                    console.log('Uploading to Supabase:', gameForSupabase);
                     const { data, error } = await window.sbClient.from('games').insert([gameForSupabase]);
                     
                     if (error) {
                         console.error('Supabase INSERT error:', error);
-                        showToast('⚠️ Spiel lokal gespeichert, Cloud-Sync später');
+                        console.error('Error message:', error.message);
+                        console.error('Error details:', error.details);
+                        showToast('❌ Cloud-Fehler: ' + (error.message || 'Unbekannt') + ' (lokal gespeichert)');
                     } else {
                         console.log('Game successfully inserted into Supabase:', data);
-                        showToast('✓ Spiel synced!');
+                        showToast('✅ Spiel zu Cloud hochgeladen!');
                     }
                 } catch (err) {
                     console.error('Exception during Supabase upload:', err);
-                    showToast('⚠️ Lokal gespeichert, Cloud-Sync später');
+                    console.error('Exception message:', err.message);
+                    showToast('❌ Upload-Fehler: ' + err.message);
                 }
             } else {
                 showToast('📱 Offline - Spiel wird später synced');
@@ -1537,6 +1571,94 @@
             showToast('✓ Spiel gelöscht!');
         }
 
+        // =====================================================
+        // MANUAL SYNC
+        // =====================================================
+        async function manualSyncAllGames() {
+            if (!isOnline) {
+                showToast('❌ Nicht online - kann nicht synchronisieren');
+                return;
+            }
+
+            if (!currentUser || !currentUser.id) {
+                showToast('❌ Nicht angemeldet');
+                return;
+            }
+
+            showToast('🔄 Synchronisiere ' + games.length + ' Spiele...');
+            let synced = 0;
+            let failed = 0;
+
+            for (let game of games) {
+                try {
+                    const gameForSupabase = {
+                        id: game.id,
+                        user_id: game.user_id,
+                        opponent: game.opponent,
+                        name: game.name,
+                        location: game.location,
+                        league: game.league,
+                        date: game.date,
+                        players: game.players,
+                        coaches: game.coaches || [],
+                        timeouts: game.timeouts || { total: 0, firstHalf: 0, secondHalf: 0 },
+                        own_goals: game.ownGoals,
+                        opponent_goals: game.opponentGoals,
+                        start_time: game.startTime,
+                        total_paused_ms: game.totalPausedMs || 0,
+                        logs: game.logs || [],
+                        finished: game.finished || false
+                    };
+
+                    // Prüfe ob Spiel existiert
+                    const existing = await window.sbClient
+                        .from('games')
+                        .select('id')
+                        .eq('id', game.id)
+                        .eq('user_id', currentUser.id);
+
+                    if (existing.data && existing.data.length > 0) {
+                        const { error } = await window.sbClient
+                            .from('games')
+                            .update(gameForSupabase)
+                            .eq('id', game.id)
+                            .eq('user_id', currentUser.id);
+                        
+                        if (error) {
+                            console.error('Update failed for game', game.id, error);
+                            console.error('Error details:', error.message, error.details);
+                            failed++;
+                        } else {
+                            console.log('Game synced:', game.id);
+                            synced++;
+                        }
+                    } else {
+                        const { error } = await window.sbClient
+                            .from('games')
+                            .insert([gameForSupabase]);
+                        
+                        if (error) {
+                            console.error('Insert failed for game', game.id, error);
+                            console.error('Error details:', error.message, error.details);
+                            failed++;
+                        } else {
+                            console.log('Game inserted:', game.id);
+                            synced++;
+                        }
+                    }
+                } catch (err) {
+                    console.error('Sync exception for game', game.id, err);
+                    failed++;
+                }
+            }
+
+            showToast('✅ Synchronisiert: ' + synced + ' ✓, ' + failed + ' ✗');
+            if (failed > 0) {
+                console.log('Check browser console for error details');
+            }
+            renderGames();
+        }
+
         async function saveCurrentGame() {
             if (!currentGame) return;
 
@@ -1549,6 +1671,13 @@
 
             if (isOnline) {
                 try {
+                    console.log('Syncing to Supabase...');
+                    
+                    if (!currentUser || !currentUser.id) {
+                        console.error('User not authenticated for sync');
+                        return;
+                    }
+                    
                     // Alle Spalten mit korrekten Snake_case Namen
                     const gameForSupabase = {
                         id: currentGame.id,
@@ -1584,6 +1713,7 @@
                         
                         if (updateError) {
                             console.error('Update error:', updateError);
+                            console.error('Error details:', updateError.message, updateError.details);
                         } else {
                             console.log('Game synced to Supabase');
                         }
@@ -1594,12 +1724,14 @@
                         
                         if (insertError) {
                             console.error('Insert error:', insertError);
+                            console.error('Error details:', insertError.message, insertError.details);
                         } else {
                             console.log('Game synced to Supabase');
                         }
                     }
                 } catch (err) {
                     console.error('Sync error:', err);
+                    console.error('Sync error message:', err.message);
                 }
             }
         }
@@ -1901,11 +2033,75 @@
             setTimeout(() => toast.classList.remove('show'), 2000);
         }
 
-        async function syncData() {
-            if (!isOnline) return;
-            // Auto-sync current game
-            if (currentGame) {
-                await saveCurrentGame();
+        async function testSupabaseConnection() {
+            console.log('Testing Supabase connection...');
+            showToast('🧪 Teste Supabase-Verbindung...');
+
+            try {
+                if (!window.sbClient) {
+                    showToast('❌ Supabase Client nicht initialisiert');
+                    return;
+                }
+
+                if (!currentUser || !currentUser.id) {
+                    showToast('❌ Nicht authentifiziert');
+                    return;
+                }
+
+                // Test 1: Games table exists and is readable
+                console.log('Test 1: Games table select');
+                const { data: testGames, error: gamesError } = await window.sbClient
+                    .from('games')
+                    .select('id')
+                    .eq('user_id', currentUser.id)
+                    .limit(1);
+
+                if (gamesError) {
+                    console.error('Games table error:', gamesError);
+                    showToast('❌ Games Table Error: ' + gamesError.message);
+                    return;
+                } else {
+                    console.log('✅ Games table readable, found ' + testGames.length + ' games');
+                }
+
+                // Test 2: Try to insert a test game
+                console.log('Test 2: Insert test');
+                const testGameId = 'test_' + Date.now();
+                const { error: insertError } = await window.sbClient
+                    .from('games')
+                    .insert([{
+                        id: testGameId,
+                        user_id: currentUser.id,
+                        opponent: 'Test',
+                        name: 'Test Game',
+                        date: new Date().toISOString(),
+                        players: [],
+                        coaches: [],
+                        timeouts: { total: 0, firstHalf: 0, secondHalf: 0 },
+                        own_goals: 0,
+                        opponent_goals: 0,
+                        finished: false
+                    }]);
+
+                if (insertError) {
+                    console.error('Insert test error:', insertError);
+                    showToast('❌ Insert Error: ' + insertError.message);
+                    return;
+                } else {
+                    console.log('✅ Insert successful');
+                    
+                    // Delete test game
+                    await window.sbClient
+                        .from('games')
+                        .delete()
+                        .eq('id', testGameId);
+                    console.log('✅ Test game deleted');
+                }
+
+                showToast('✅ Supabase funktioniert perfekt!');
+            } catch (err) {
+                console.error('Connection test exception:', err);
+                showToast('❌ Exception: ' + err.message);
             }
         }
     </script>

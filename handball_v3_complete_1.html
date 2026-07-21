@@ -1095,12 +1095,18 @@
             container.innerHTML = '<div class="card"><div class="card-title">➕ Neues Spiel</div>' +
                 '<label class="form-label">Gegner*</label>' +
                 '<input type="text" class="form-input" id="gameOpponent" placeholder="z.B. RheinNeckar Löwen">' +
-                '<label class="form-label">Spiel-Name</label>' +
-                '<input type="text" class="form-input" id="gameName" placeholder="z.B. Heimspiel">' +
                 '<label class="form-label">Ort</label>' +
                 '<input type="text" class="form-input" id="gameLocation" placeholder="z.B. Viernheim">' +
-                '<label class="form-label">Liga</label>' +
-                '<input type="text" class="form-input" id="gameLeague" placeholder="z.B. Oberliga">' +
+                '<div style="display: flex; gap: 1rem; margin-bottom: 1rem;">' +
+                    '<div style="flex: 1;">' +
+                        '<label class="form-label">Datum</label>' +
+                        '<input type="date" class="form-input" id="gameDate" style="margin-bottom: 0;">' +
+                    '</div>' +
+                    '<div style="flex: 1;">' +
+                        '<label class="form-label">Anwurfzeit</label>' +
+                        '<input type="time" class="form-input" id="gameTime" placeholder="19:30" style="margin-bottom: 0;">' +
+                    '</div>' +
+                '</div>' +
                 '<button class="btn btn-primary" onclick="openPlayerSelectionModal(\'field\')" style="width: 100%;">🆕 Spiel starten - Spieler auswählen</button>' +
                 '</div>';
 
@@ -1121,12 +1127,14 @@
                         const opponent = g.opponent || 'Unbekannt';
                         const ownGoals = g.ownGoals !== undefined ? g.ownGoals : (g.own_goals || 0);
                         const oppGoals = g.opponentGoals !== undefined ? g.opponentGoals : (g.opponent_goals || 0);
+                        const dateStr = g.date ? new Date(g.date).toLocaleDateString('de-DE') : 'Unbekannt';
+                        const timeStr = g.time || '–';
                         
                         return '<div class="card" onclick="selectGame(\'' + g.id + '\')" style="cursor: pointer; display: flex; justify-content: space-between; align-items: center; position: relative;">' +
                         '<div><div class="card-title" style="margin: 0; font-size: 14px;">' + opponent + 
                         (g.finished ? ' <span style="background: #639922; color: white; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 10px; margin-left: 0.5rem;">✓ BEENDET</span>' : '') + 
                         '</div>' +
-                        '<div style="font-size: 11px; color: #999;">' + new Date(g.date).toLocaleDateString('de-DE') + '</div></div>' +
+                        '<div style="font-size: 11px; color: #999;">📅 ' + dateStr + ' ⏰ ' + timeStr + '</div></div>' +
                         '<div style="font-size: 24px; font-weight: 700; color: #185fa5;">' + ownGoals + ':' + oppGoals + '</div>' +
                         '<button class="btn btn-danger" style="padding: 0.5rem; min-height: auto;" onclick="event.stopPropagation(); deleteGame(\'' + g.id + '\');">Del</button>' +
                         '</div>';
@@ -1750,9 +1758,12 @@
 
         async function createGameWithSelectedPlayers() {
             const opponent = document.getElementById('gameOpponent').value || 'Gegner';
-            const name = document.getElementById('gameName').value || 'Spiel ' + new Date().toLocaleDateString('de-DE');
             const location = document.getElementById('gameLocation').value || '';
-            const league = document.getElementById('gameLeague').value || '';
+            const gameDate = document.getElementById('gameDate').value || new Date().toISOString().split('T')[0];
+            const gameTime = document.getElementById('gameTime').value || '19:00';
+            
+            // Automatischer Name aus Datum + Uhrzeit
+            const name = gameDate + ' ' + gameTime;
 
             const allSelectedIds = [...tempFieldPlayers, ...tempGoalkeepers];
             
@@ -1786,8 +1797,8 @@
                 opponent,
                 name,
                 location,
-                league,
-                date: new Date().toISOString(),
+                date: gameDate,
+                time: gameTime,
                 players: newPlayers,
                 coaches: COACHES.map(letter => {
                     const coachData = coaches.find(c => c.letter === letter);

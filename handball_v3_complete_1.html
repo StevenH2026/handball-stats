@@ -2528,7 +2528,8 @@
 
         function getElapsedSeconds() {
             // Wenn pausiert: Zeige die gespeicherte Sekunde an (unverändert!)
-            if (currentGame && currentGame.pausedSeconds !== null && currentGame.pausedSeconds !== undefined) {
+            // WICHTIG: Überprüfe BEIDE - pausedAtMs UND pausedSeconds!
+            if (currentGame && currentGame.pausedAtMs && currentGame.pausedSeconds !== null && currentGame.pausedSeconds !== undefined) {
                 return currentGame.pausedSeconds;
             }
             

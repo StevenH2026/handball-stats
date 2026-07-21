@@ -2391,6 +2391,8 @@
             currentGame.timeouts[currentHalf]++;
             
             // ✅ Timer pausieren wenn Timeout genommen
+            currentGame.elapsedAtPause = elapsed;  // Speichere aktuelle Spielzeit
+            currentGame.pausedAt = Date.now();
             stopTimer();
             
             saveCurrentGame();
@@ -2421,6 +2423,8 @@
             currentGame.opponentTimeouts[currentHalf]++;
             
             // ✅ Timer pausieren wenn Timeout genommen
+            currentGame.elapsedAtPause = elapsed;  // Speichere aktuelle Spielzeit
+            currentGame.pausedAt = Date.now();
             stopTimer();
             
             saveCurrentGame();
@@ -2494,20 +2498,25 @@
         function toggleTimer() {
             if (!currentGame) return;
             if (timerInterval) {
-                // PAUSE - aktuelle Zeit speichern
+                // PAUSE - Speichere die aktuelle Spielzeit
+                currentGame.elapsedAtPause = getElapsedSeconds();
                 currentGame.pausedAt = Date.now();
+                console.log('⏸️ Timer paused at: ' + currentGame.elapsedAtPause + 's');
                 stopTimer();
             } else {
-                // RESUME - berechne wie lange pausiert wurde
+                // RESUME - Berechne die Pause-Dauer
                 if (!currentGame.startTime) {
                     currentGame.startTime = Date.now();
                     currentGame.totalPausedMs = 0;
+                    currentGame.elapsedAtPause = 0;
                 } else if (currentGame.pausedAt) {
-                    // Addiere die Pause-Zeit zur Gesamt-Pause-Zeit
+                    // Berechne wie lange pausiert wurde
                     const pauseDuration = Date.now() - currentGame.pausedAt;
                     currentGame.totalPausedMs = (currentGame.totalPausedMs || 0) + pauseDuration;
+                    console.log('▶️ Timer resumed | Pause duration: ' + pauseDuration + 'ms | Total paused: ' + currentGame.totalPausedMs + 'ms');
                 }
                 currentGame.pausedAt = null;
+                currentGame.elapsedAtPause = null;
                 startTimer();
             }
             saveCurrentGame();
@@ -2515,10 +2524,20 @@
         }
 
         function getElapsedSeconds() {
-            if (!currentGame || !currentGame.startTime) return 0;
+            if (!currentGame) return 0;
+            
+            // Wenn pausiert: Zeige die gespeicherte Spielzeit an (keine Veränderung!)
+            if (currentGame.pausedAt && currentGame.elapsedAtPause !== null && currentGame.elapsedAtPause !== undefined) {
+                return currentGame.elapsedAtPause;
+            }
+            
+            // Wenn läuft: Berechne basierend auf startTime und totalPausedMs
+            if (!currentGame.startTime) return 0;
+            
             const now = Date.now();
             const totalElapsed = now - currentGame.startTime;
             const totalPaused = currentGame.totalPausedMs || 0;
+            
             return Math.floor((totalElapsed - totalPaused) / 1000);
         }
 

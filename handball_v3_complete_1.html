@@ -1183,13 +1183,13 @@
                 '<div class="score-display">' +
                 '<div class="score-team"><div style="font-size: 13px;">Wir</div><div class="score-number">' + (currentGame.ownGoals || 0) + '</div>' +
                 '<input type="number" min="0" value="' + (currentGame.ownGoals || 0) + '" style="width: 60px; text-align: center; margin-top: 0.5rem; font-size: 13px;" onchange="updateGameScore(this.value, ' + (currentGame.opponentGoals || 0) + ')">' +
-                '<div style="font-size: 11px; margin-top: 0.5rem; color: #666; font-weight: 600;">⏸️ TO: ' + (currentGame.timeouts?.total || 0) + '/' + MAX_TIMEOUTS_TOTAL + '</div>' +
+                '<div style="font-size: 16px; margin-top: 0.5rem; color: white; font-weight: 700;">⏸️ TO: ' + (currentGame.timeouts?.total || 0) + '/' + MAX_TIMEOUTS_TOTAL + '</div>' +
                 '<button class="btn btn-info" onclick="addTeamTimeout()" ' + ((currentGame.timeouts && currentGame.timeouts.total >= MAX_TIMEOUTS_TOTAL) ? 'disabled' : '') + ' style="width: 90%; margin-top: 0.3rem; padding: 0.5rem; font-size: 11px; min-height: 30px;">⏸️ Team</button>' +
                 '</div>' +
                 '<div style="font-size: 22px; font-weight: 600;">:</div>' +
                 '<div class="score-team"><div style="font-size: 13px;">Gegner</div><div class="score-number">' + (currentGame.opponentGoals || 0) + '</div>' +
                 '<input type="number" min="0" value="' + (currentGame.opponentGoals || 0) + '" style="width: 60px; text-align: center; margin-top: 0.5rem; font-size: 13px;" onchange="updateGameScore(' + (currentGame.ownGoals || 0) + ', this.value)">' +
-                '<div style="font-size: 11px; margin-top: 0.5rem; color: #666; font-weight: 600;">⏸️ TO: ' + (currentGame.opponentTimeouts?.total || 0) + '/' + MAX_TIMEOUTS_TOTAL + '</div>' +
+                '<div style="font-size: 16px; margin-top: 0.5rem; color: white; font-weight: 700;">⏸️ TO: ' + (currentGame.opponentTimeouts?.total || 0) + '/' + MAX_TIMEOUTS_TOTAL + '</div>' +
                 '<button class="btn btn-secondary" onclick="addOpponentTimeout()" ' + ((currentGame.opponentTimeouts && currentGame.opponentTimeouts.total >= MAX_TIMEOUTS_TOTAL) ? 'disabled' : '') + ' style="width: 90%; margin-top: 0.3rem; padding: 0.5rem; font-size: 11px; min-height: 30px; background: #f0f0f0; color: #666; border: 1px solid #ccc;">⏸️ Gegner</button>' +
                 '</div>' +
                 '</div>';
@@ -2389,9 +2389,13 @@
             
             currentGame.timeouts.total++;
             currentGame.timeouts[currentHalf]++;
+            
+            // ✅ Timer pausieren wenn Timeout genommen
+            stopTimer();
+            
             saveCurrentGame();
             renderStats();
-            showToast('⏸️ Team Timeout erfasst! (' + currentGame.timeouts.total + '/' + MAX_TIMEOUTS_TOTAL + ')');
+            showToast('⏸️ Team Timeout! Timer pausiert. (' + currentGame.timeouts.total + '/' + MAX_TIMEOUTS_TOTAL + ')');
         }
 
         function addOpponentTimeout() {
@@ -2415,9 +2419,13 @@
             
             currentGame.opponentTimeouts.total++;
             currentGame.opponentTimeouts[currentHalf]++;
+            
+            // ✅ Timer pausieren wenn Timeout genommen
+            stopTimer();
+            
             saveCurrentGame();
             renderStats();
-            showToast('ℹ️ Gegner Timeout erfasst! (' + currentGame.opponentTimeouts.total + '/' + MAX_TIMEOUTS_TOTAL + ')');
+            showToast('ℹ️ Gegner Timeout! Timer pausiert. (' + currentGame.opponentTimeouts.total + '/' + MAX_TIMEOUTS_TOTAL + ')');
         }
 
         // =====================================================

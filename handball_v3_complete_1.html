@@ -1208,7 +1208,7 @@
             if (fieldPlayers.length > 0) {
                 html += '<div class="card"><div class="card-title">🏐 Feldspieler (' + fieldPlayers.length + ')</div><div class="player-grid">' +
                     fieldPlayers.map(p => '<button class="player-btn' + (selectedPlayer && selectedPlayer.id === p.id ? ' selected' : '') + '" onclick="selectPlayerFromGame(\'' + p.id + '\'); renderStats();">' +
-                    '<div>#' + p.number + '</div><div style="font-size: 12px;">' + p.name + '</div>' +
+                    '<div style="font-size: 18px; font-weight: 700;">#' + p.number + '</div><div style="font-size: 14px; font-weight: 600;">' + p.name + '</div>' +
                     '<div style="font-size: 11px;">⚽ ' + ((p.goals || 0) + (p.goals7m || 0)) + '</div></button>').join('') +
                     '</div></div>';
             }
@@ -1233,7 +1233,7 @@
             if (gks.length > 0) {
                 html += '<div class="card"><div class="card-title">🥅 Torwarte (' + gks.length + ')</div><div class="player-grid">' +
                     gks.map(p => '<button class="player-btn' + (selectedPlayer && selectedPlayer.id === p.id ? ' selected' : '') + '" onclick="selectPlayerFromGame(\'' + p.id + '\'); renderStats();">' +
-                    '<div>TW</div><div style="font-size: 12px;">' + p.name + '</div></button>').join('') +
+                    '<div style="font-size: 18px; font-weight: 700;">TW</div><div style="font-size: 14px; font-weight: 600;">' + p.name + '</div></button>').join('') +
                     '</div></div>';
             }
 
@@ -1281,8 +1281,8 @@
                         const coachData = coaches.find(coach => coach.letter === c.letter);
                         const coachName = coachData ? coachData.name : 'Betreuer ' + c.letter;
                         return '<button class="player-btn coach' + (selectedPlayer && selectedPlayer.letter === c.letter && selectedPlayer.isCoach ? ' selected' : '') + '" onclick="selectCoach(\'' + c.letter + '\'); renderStats();">' +
-                            '<div style="font-size: 14px; font-weight: bold;">' + c.letter + '</div>' +
-                            '<div style="font-size: 11px; font-weight: 600;">' + coachName + '</div>' +
+                            '<div style="font-size: 18px; font-weight: bold;">' + c.letter + '</div>' +
+                            '<div style="font-size: 14px; font-weight: 600;">' + coachName + '</div>' +
                             '<div style="font-size: 10px;">🟡 ' + (c.yellowCard || 0) + ' ⏱️ ' + (c.twoMinute || 0) + ' 🔴 ' + (c.redCard || 0) + '</div></button>';
                     }).join('') +
                     '</div></div>';
@@ -1313,7 +1313,7 @@
             
             availablePlayers.forEach(p => {
                 const isGK = p.is_goalkeeper || p.isGoalkeeper;
-                html += '<button class="player-btn" onclick="addPlayerToCurrentGame(\'' + p.id + '\'); closeAddPlayerModal();" style="background: ' + (isGK ? '#ffb366' : '#85c1e9') + ';"><strong>#' + p.number + '</strong><br>' + p.name.substring(0, 12) + '<br>' + (isGK ? '🥅' : '🏐') + '</button>';
+                html += '<button class="player-btn" onclick="addPlayerToCurrentGame(\'' + p.id + '\'); closeAddPlayerModal();" style="background: ' + (isGK ? '#ffb366' : '#85c1e9') + ';"><strong style="font-size: 18px;">#' + p.number + '</strong><br><span style="font-size: 14px; font-weight: 600;">' + p.name.substring(0, 12) + '</span><br>' + (isGK ? '🥅' : '🏐') + '</button>';
             });
 
             html += '</div>';

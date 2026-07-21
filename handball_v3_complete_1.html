@@ -178,6 +178,9 @@
                     <div class="sync-dot" id="syncDot"></div>
                     <span id="syncStatus">Synced</span>
                 </div>
+                <button class="btn-small" id="undoBtn" onclick="undo()" 
+                        title="Letzte Aktion rückgängig machen (Strg+Z)"
+                        style="display: none;">↶ Undo</button>
                 <span id="userEmail"></span>
                 <button class="btn-small" onclick="loadData(); showToast('🔄 Aktualisiert!')">🔄</button>
                 <button class="btn-small" onclick="toggleDebugBox()">🐛</button>
@@ -253,6 +256,8 @@
         let coaches = [];
         let currentGame = null;
         let selectedPlayer = null;
+        let actionHistory = [];  // Speichert letzte Aktion für Undo
+        const MAX_HISTORY = 1;   // Nur letzter Schritt
         let timerInterval = null;
         let isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
         let tempFieldPlayers = [];
@@ -592,6 +597,91 @@
         }
 
         // =====================================================
+        // UNDO FUNKTIONALITÄT
+        // =====================================================
+        function undo() {
+            // Guard: Etwas zum Rückgängigmachen?
+            if (actionHistory.length === 0) {
+                showToast('⚠️ Nichts zum Rückgängigmachen');
+                return false;
+            }
+            
+            // Guard: Aktives Spiel?
+            if (!currentGame) {
+                showToast('⚠️ Kein Spiel aktiv');
+                return false;
+            }
+            
+            try {
+                const action = actionHistory.pop();
+                
+                switch (action.type) {
+                    case 'stat':
+                        const player = currentGame.players.find(p => p?.id === action.playerId);
+                        if (player) {
+                            player[action.stat] = action.oldValue;
+                            
+                            // Stat-Labels für bessere Meldungen
+                            const statLabel = {
+                                'goals': 'Tor',
+                                'goals7m': 'Tor (7m)',
+                                'assists': 'Pass',
+                                'turnovers': 'Ballverlust',
+                                'foulsReceived': 'Foul',
+                                'missedShots': 'Fehlwurf',
+                                'missedShots7m': 'Fehlwurf (7m)',
+                                'technicalFouls': 'Tech. Fehler',
+                                'missedPasses': 'Fehlpass',
+                                'oneOnOneContra': '1:1 gegen',
+                                'yellowCard': 'Gelbe Karte',
+                                'twoMinute': '2 Minuten',
+                                'redCard': 'Rote Karte',
+                                'saved': 'Parade',
+                                'saved7m': 'Parade (7m)',
+                                'conceded': 'Gegentreffer',
+                                'conceded7m': 'Gegentreffer (7m)'
+                            }[action.stat] || action.stat;
+                            
+                            showToast(`↶ ${statLabel} von #${action.playerNumber} ${action.playerName} rückgängig gemacht`);
+                            console.log(`↶ Undo: ${statLabel} von ${action.playerName}`);
+                        }
+                        break;
+                    
+                    case 'score':
+                        currentGame.ownGoals = action.oldOwnGoals;
+                        currentGame.opponentGoals = action.oldOppGoals;
+                        showToast(`↶ Ergebnis von ${action.newOwnGoals}:${action.newOppGoals} auf ${action.oldOwnGoals}:${action.oldOppGoals} rückgängig gemacht`);
+                        console.log(`↶ Undo: Score rückgängig gemacht`);
+                        break;
+                }
+                
+                updateUndoButtonVisibility();
+                renderStats();
+                saveCurrentGame();
+                return true;
+                
+            } catch (err) {
+                console.error('❌ Undo-Fehler:', err);
+                showToast('⚠️ Fehler beim Rückgängigmachen');
+                return false;
+            }
+        }
+
+        function updateUndoButtonVisibility() {
+            const undoBtn = document.getElementById('undoBtn');
+            if (!undoBtn) return;
+            
+            // Zeige Button nur wenn:
+            // 1. Es etwas zum Undo gibt UND
+            // 2. Ein Spiel aktiv ist
+            if (actionHistory.length > 0 && currentGame) {
+                undoBtn.style.display = 'inline-block';  // ✅ Zeigen
+            } else {
+                undoBtn.style.display = 'none';  // ❌ Verstecken
+            }
+        }
+
+        // =====================================================
         // KEYBOARD SHORTCUTS - ENTER-TASTE UNTERSTÜTZUNG
         // =====================================================
         // Enter-Taste aktiviert Login
@@ -635,6 +725,14 @@
             if (e.key === 'Enter') {
                 e.preventDefault();
                 handleSignup();
+            }
+        });
+
+        // Strg+Z (oder Cmd+Z auf Mac) für Undo
+        document.addEventListener('keydown', (e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+                e.preventDefault();
+                undo();
             }
         });
 
@@ -1810,6 +1908,10 @@
             // Spiel setzen
             currentGame = game;
             selectedPlayer = null;
+            
+            // Undo-History bei Spiel-Wechsel leeren
+            actionHistory = [];
+            
             console.log('✅ Spiel geladen: ' + game.opponent);
             
             // Tab wechseln - mit Fallback
@@ -2131,10 +2233,42 @@
         }
 
         function updateStat(playerId, stat, delta) {
-            if (!currentGame) return;
-            const p = currentGame.players.find(x => x.id === playerId);
-            if (!p) return;
-            p[stat] = Math.max(0, (p[stat] || 0) + delta);
+            // Guard: Spiel aktiv?
+            if (!currentGame) {
+                console.warn('⚠️ updateStat: Kein Spiel aktiv');
+                return;
+            }
+            
+            // Guard: Spieler existiert?
+            const p = currentGame.players.find(x => x?.id === playerId);
+            if (!p) {
+                console.error('❌ updateStat: Spieler nicht gefunden');
+                return;
+            }
+            
+            // Alte Wert speichern BEVOR die Änderung
+            const oldValue = p[stat] || 0;
+            const newValue = Math.max(0, oldValue + delta);
+            
+            // UNDO-TRACKING: Speichere Action in History
+            if (oldValue !== newValue) {
+                actionHistory.push({
+                    type: 'stat',
+                    playerId: playerId,
+                    playerName: p.name || 'Unbekannt',
+                    playerNumber: p.number || '?',
+                    stat: stat,
+                    oldValue: oldValue,
+                    newValue: newValue,
+                    timestamp: Date.now()
+                });
+                if (actionHistory.length > MAX_HISTORY) {
+                    actionHistory.shift();
+                }
+            }
+            
+            // Normale Verarbeitung
+            p[stat] = newValue;
 
             if (stat === 'goals' || stat === 'goals7m') {
                 currentGame.ownGoals = currentGame.players.reduce((s, pl) => s + (pl.goals || 0) + (pl.goals7m || 0), 0);
@@ -2153,14 +2287,38 @@
             });
             if (currentGame.logs.length > 3) currentGame.logs.pop();
 
+            updateUndoButtonVisibility();
             renderStats();
             saveCurrentGame();
         }
 
         function updateGameScore(own, opp) {
             if (!currentGame) return;
-            currentGame.ownGoals = Math.max(0, parseInt(own) || 0);
-            currentGame.opponentGoals = Math.max(0, parseInt(opp) || 0);
+            
+            const oldOwnGoals = currentGame.ownGoals;
+            const oldOppGoals = currentGame.opponentGoals;
+            const newOwnGoals = Math.max(0, parseInt(own) || 0);
+            const newOppGoals = Math.max(0, parseInt(opp) || 0);
+            
+            // UNDO-TRACKING: Nur speichern wenn wirklich eine Änderung
+            if (oldOwnGoals !== newOwnGoals || oldOppGoals !== newOppGoals) {
+                actionHistory.push({
+                    type: 'score',
+                    oldOwnGoals: oldOwnGoals,
+                    oldOppGoals: oldOppGoals,
+                    newOwnGoals: newOwnGoals,
+                    newOppGoals: newOppGoals,
+                    timestamp: Date.now()
+                });
+                if (actionHistory.length > MAX_HISTORY) {
+                    actionHistory.shift();
+                }
+            }
+            
+            // Normale Verarbeitung
+            currentGame.ownGoals = newOwnGoals;
+            currentGame.opponentGoals = newOppGoals;
+            updateUndoButtonVisibility();
             saveCurrentGame();
             showToast('⚽ ' + currentGame.ownGoals + ':' + currentGame.opponentGoals);
         }

@@ -1,0 +1,2725 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🏐 Handball Statistik v3.2</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        html, body { width: 100%; height: 100%; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+        body { background: #f5f5f5; overflow: hidden; }
+        
+        /* Mobile First - Responsive */
+        @media (max-width: 768px) {
+            .stat-buttons { grid-template-columns: repeat(auto-fit, minmax(60px, 1fr)); gap: 0.5rem; }
+            .player-grid { grid-template-columns: repeat(auto-fill, minmax(70px, 1fr)); gap: 0.3rem; }
+            .player-btn { padding: 0.75rem 0.25rem; min-height: 100px; font-size: 11px; }
+            .score-display { gap: 0.5rem; }
+            .score-number { font-size: 40px; }
+            .timer { font-size: 28px; }
+            .nav-btn { padding: 0.75rem 0.5rem; font-size: 11px; }
+            .btn { padding: 0.75rem 1rem; font-size: 12px; min-height: 40px; }
+            .card { padding: 1rem; margin-bottom: 1rem; }
+            .card-title { font-size: 14px; }
+            .form-input { min-height: 40px; font-size: 13px; }
+        }
+        
+        @media (max-width: 480px) {
+            .stat-buttons { grid-template-columns: repeat(auto-fit, minmax(55px, 1fr)); gap: 0.3rem; }
+            .stat-btn { padding: 0.75rem 0.5rem; font-size: 10px; min-height: 45px; }
+            .player-grid { grid-template-columns: repeat(auto-fill, minmax(60px, 1fr)); gap: 0.25rem; }
+            .player-btn { padding: 0.5rem 0.25rem; min-height: 90px; font-size: 10px; }
+            .score-display { flex-direction: column; gap: 0.25rem; }
+            .score-number { font-size: 32px; }
+            .timer { font-size: 24px; }
+            .header h1 { font-size: 16px; }
+            .card-title { font-size: 13px; }
+            .nav { overflow-x: scroll; }
+            .nav-btn { padding: 0.5rem 0.5rem; font-size: 10px; }
+        }
+        
+        /* Auth Screen */
+        .auth-screen { display: none; position: fixed; width: 100%; height: 100%; background: linear-gradient(135deg, #185fa5 0%, #378add 100%); z-index: 5000; align-items: center; justify-content: center; }
+        .auth-screen.show { display: flex; }
+        .auth-card { background: white; padding: 2rem; border-radius: 12px; width: 90%; max-width: 400px; box-shadow: 0 8px 32px rgba(0,0,0,0.2); }
+        .auth-card h1 { color: #185fa5; margin-bottom: 1.5rem; text-align: center; font-size: 24px; }
+        .auth-tabs { display: flex; gap: 0; margin-bottom: 1.5rem; }
+        .auth-tab-btn { flex: 1; padding: 0.75rem; background: #f0f0f0; border: none; cursor: pointer; font-weight: 600; border-bottom: 3px solid transparent; }
+        .auth-tab-btn.active { background: #e8f5e9; border-bottom-color: #639922; color: #2e5c0f; }
+        .auth-tab { display: none; }
+        .auth-tab.active { display: block; }
+        .auth-input { width: 100%; padding: 0.875rem; border: 1px solid #ddd; border-radius: 8px; margin-bottom: 1rem; font-size: 14px; }
+        .auth-btn { width: 100%; padding: 0.875rem; background: #185fa5; color: white; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; min-height: 44px; margin-bottom: 0.5rem; }
+        .auth-btn:hover { background: #0d4080; }
+        .auth-error { color: #e24b4a; font-size: 12px; margin-bottom: 1rem; text-align: center; }
+        
+        /* Main App */
+        .app { width: 100vw; height: 100vh; display: flex; flex-direction: column; }
+        .header { background: linear-gradient(135deg, #185fa5 0%, #378add 100%); color: white; padding: 1rem; flex-shrink: 0; display: flex; justify-content: space-between; align-items: center; }
+        .header h1 { font-size: 20px; font-weight: 700; }
+        .header-right { display: flex; gap: 1rem; align-items: center; font-size: 11px; }
+        .sync-indicator { display: flex; align-items: center; gap: 0.5rem; }
+        .sync-dot { width: 6px; height: 6px; border-radius: 50%; background: #90EE90; }
+        .sync-dot.pending { background: #FFD700; animation: pulse 1s infinite; }
+        .sync-dot.offline { background: #FF6B6B; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        .btn-small { padding: 0.5rem 0.75rem; background: rgba(255,255,255,0.2); color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 11px; min-height: auto; }
+        .btn-small:hover { background: rgba(255,255,255,0.3); }
+        
+        .nav { display: flex; background: white; border-bottom: 2px solid #ddd; overflow-x: auto; flex-shrink: 0; }
+        .nav-btn { padding: 1rem 0.75rem; border: none; background: none; cursor: pointer; font-size: 12px; color: #666; border-bottom: 3px solid transparent; white-space: nowrap; flex: 0 0 auto; }
+        .nav-btn.active { color: #185fa5; border-bottom-color: #185fa5; font-weight: 700; }
+        .content { flex: 1; overflow-y: scroll; -webkit-overflow-scrolling: touch; padding: 1rem; padding-bottom: 3rem; }
+        .tab { display: none; }
+        .tab.active { display: block; }
+        .card { background: white; border: 1px solid #ddd; border-radius: 8px; padding: 1.25rem; margin-bottom: 1.5rem; }
+        .card-title { font-weight: 700; font-size: 16px; margin-bottom: 1rem; color: #185fa5; }
+        .btn { padding: 0.875rem 1.25rem; border: 1px solid #ddd; background: white; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 600; min-height: 44px; margin: 0.5rem 0; }
+        .btn-primary { background: #185fa5; color: white; border-color: #185fa5; }
+        .btn-danger { background: #e24b4a; color: white; border-color: #e24b4a; }
+        .btn-success { background: #639922; color: white; border-color: #639922; }
+        .btn-warning { background: #f39c12; color: white; border-color: #f39c12; }
+        .form-input { padding: 0.875rem; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; width: 100%; min-height: 44px; margin-bottom: 1rem; }
+        .form-label { display: block; margin-bottom: 0.5rem; font-size: 13px; font-weight: 600; }
+        
+        .scoreboard-sticky { position: sticky; top: 0; z-index: 100; background: linear-gradient(135deg, #185fa5 0%, #378add 100%); color: white; border-radius: 0 0 12px 12px; padding: 1rem; margin: -1rem -1rem 1.5rem -1rem; box-shadow: 0 2px 8px rgba(0,0,0,0.15); }
+        .score-display { display: flex; justify-content: space-around; align-items: center; margin-bottom: 1rem; gap: 1rem; }
+        .score-team { flex: 1; text-align: center; }
+        .score-number { font-size: 56px; font-weight: 700; }
+        .timer { font-size: 32px; font-weight: 700; text-align: center; margin-bottom: 0.75rem; font-family: 'Courier New', monospace; }
+        .halftime-badge { display: inline-block; background: #f39c12; color: #333; padding: 0.25rem 0.75rem; border-radius: 12px; font-size: 11px; font-weight: 700; margin-top: 0.5rem; }
+        .timer-buttons { display: flex; gap: 0.5rem; justify-content: center; margin-bottom: 1rem; }
+        .timer-buttons button { padding: 0.5rem 1rem; font-size: 12px; min-height: auto; margin: 0; flex: 1; }
+        .live-feed { background: rgba(255,255,255,0.1); border-radius: 8px; padding: 0.75rem; margin-top: 1rem; max-height: 120px; overflow-y: auto; }
+        .feed-item { background: rgba(255,255,255,0.15); padding: 0.5rem; border-radius: 4px; margin-bottom: 0.5rem; font-size: 11px; line-height: 1.3; }
+        
+        .player-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(90px, 1fr)); gap: 0.5rem; margin: 1.5rem 0; }
+        .player-btn { padding: 1rem 0.5rem; background: #f9f9f9; border: 2px solid #ddd; border-radius: 8px; cursor: pointer; text-align: center; min-height: 120px; display: flex; flex-direction: column; justify-content: center; font-size: 13px; }
+        .player-btn.selected { background: #185fa5; color: white; border-color: #185fa5; }
+        
+        .stat-buttons { display: grid; grid-template-columns: repeat(auto-fit, minmax(80px, 1fr)); gap: 0.75rem; margin: 1.5rem 0; }
+        .stat-btn { padding: 1rem 0.75rem; background: #f5f5f5; border: 2px solid #ddd; border-radius: 8px; cursor: pointer; font-size: 12px; font-weight: 600; min-height: 52px; }
+        .stat-btn.plus { background: #e8f5e9; border-color: #639922; color: #2e5c0f; }
+        .stat-btn.minus { background: #ffebee; border-color: #e24b4a; color: #a32d2d; }
+        .stat-btn.info { background: #e3f2fd; border-color: #185fa5; color: #0d4080; }
+        
+        .stats-table { width: 100%; border-collapse: collapse; margin: 1rem 0; font-size: 12px; }
+        .stats-table th { padding: 0.75rem; text-align: left; font-weight: 600; color: #185fa5; border-bottom: 2px solid #ddd; font-size: 11px; }
+        .stats-table td { padding: 0.75rem; border-bottom: 1px solid #eee; text-align: right; }
+        .stats-table td:first-child { text-align: left; font-weight: 600; color: #185fa5; }
+        
+        .toast { position: fixed; bottom: 1rem; right: 1rem; background: #639922; color: white; padding: 1rem; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: 1000; display: none; }
+        .toast.show { display: block; }
+        .empty-state { text-align: center; padding: 2rem 1rem; color: #999; }
+        
+        .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); align-items: center; justify-content: center; }
+        .modal.show { display: flex; }
+        .modal-content { background-color: white; padding: 2rem; border-radius: 8px; max-width: 600px; max-height: 80vh; overflow-y: auto; }
+        .modal-title { font-size: 18px; font-weight: 700; margin-bottom: 1.5rem; color: #185fa5; }
+        .modal-buttons { display: flex; gap: 1rem; margin-top: 2rem; }
+        .modal-buttons button { flex: 1; }
+        .checkbox-item { display: flex; align-items: center; gap: 0.5rem; padding: 0.75rem; margin-bottom: 0.75rem; background: #f9f9f9; border: 2px solid #ddd; border-radius: 8px; cursor: pointer; }
+        .checkbox-item input { cursor: pointer; }
+        .checkbox-item:has(input:checked) { background: #e8f5e9; border-color: #639922; }
+        .selected-count { font-size: 12px; color: #666; margin-top: 0.5rem; }
+        
+        /* Coach Styles */
+        .player-btn.coach { background: #d4a574; border-color: #8b6f47; color: #333; }
+        .player-btn.coach.selected { background: #8b6f47; color: white; }
+        
+        /* Timeout Display */
+        .timeout-display { display: flex; gap: 1rem; justify-content: center; align-items: center; background: #fff3cd; padding: 1rem; border-radius: 8px; margin: 1rem 0; border: 2px solid #ffc107; }
+        .timeout-item { text-align: center; }
+        .timeout-count { font-size: 24px; font-weight: 700; color: #185fa5; }
+        .timeout-label { font-size: 11px; color: #666; }
+        .timeout-halftime { font-size: 12px; color: #f39c12; font-weight: 600; }
+        
+        /* Edit Buttons */
+        .edit-btn { padding: 0.25rem 0.5rem; font-size: 10px; background: #e3f2fd; border: 1px solid #185fa5; color: #185fa5; border-radius: 4px; cursor: pointer; margin-left: 0.5rem; }
+        .edit-btn:hover { background: #bbdefb; }
+    </style>
+</head>
+<body>
+    <!-- Auth Screen -->
+    <div class="auth-screen show" id="authScreen">
+        <div class="auth-card">
+            <h1>🏐 Handball Statistik v3.2</h1>
+            
+            <div class="auth-tabs">
+                <button class="auth-tab-btn active" onclick="switchAuthTab('login')">Login</button>
+                <button class="auth-tab-btn" onclick="switchAuthTab('signup')">Registrieren</button>
+            </div>
+            
+            <div id="loginTab" class="auth-tab active">
+                <div id="loginError" class="auth-error"></div>
+                <input type="email" class="auth-input" id="loginEmail" placeholder="E-Mail">
+                <input type="password" class="auth-input" id="loginPassword" placeholder="Passwort">
+                <button class="auth-btn" onclick="handleLogin()">Login</button>
+            </div>
+            
+            <div id="signupTab" class="auth-tab">
+                <div id="signupError" class="auth-error"></div>
+                <input type="text" class="auth-input" id="signupName" placeholder="Name">
+                <input type="email" class="auth-input" id="signupEmail" placeholder="E-Mail">
+                <input type="password" class="auth-input" id="signupPassword" placeholder="Passwort (mind. 6 Zeichen)">
+                <input type="password" class="auth-input" id="signupPasswordConfirm" placeholder="Passwort wiederholen">
+                <button class="auth-btn" onclick="handleSignup()">Registrieren</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main App -->
+    <div class="app" id="mainApp" style="display: none;">
+        <div class="header">
+            <h1>🏐 Handball Statistik v3.2</h1>
+            <div class="header-right">
+                <div class="sync-indicator">
+                    <div class="sync-dot" id="syncDot"></div>
+                    <span id="syncStatus">Synced</span>
+                </div>
+                <button class="btn-small" id="undoBtn" onclick="undo()" 
+                        title="Letzte Aktion rückgängig machen (Strg+Z)"
+                        style="display: none;">↶ Undo</button>
+                <span id="userEmail"></span>
+                <button class="btn-small" onclick="loadData(); showToast('🔄 Aktualisiert!')">🔄</button>
+                <button class="btn-small" onclick="toggleDebugBox()">🐛</button>
+                <button class="btn-small" onclick="handleLogout()">Logout</button>
+            </div>
+        </div>
+        
+        <div class="nav">
+            <button class="nav-btn active" onclick="switchTab('games')">📋 Spiele</button>
+            <button class="nav-btn" onclick="switchTab('stats')">📊 Erfassung</button>
+            <button class="nav-btn" onclick="switchTab('analysis')">📈 Analyse</button>
+            <button class="nav-btn" onclick="switchTab('season')">🏆 Saison</button>
+            <button class="nav-btn" onclick="switchTab('players')">⚙️ Spieler</button>
+        </div>
+        
+        <div class="content">
+            <div id="games" class="tab active"></div>
+            <div id="stats" class="tab"></div>
+            <div id="analysis" class="tab"></div>
+            <div id="season" class="tab"></div>
+            <div id="players" class="tab"></div>
+        </div>
+        
+        <div class="toast" id="toast"></div>
+    </div>
+
+    <!-- Player Selection Modal -->
+    <div id="playerSelectionModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-title" id="modalTitle">Spieler auswählen</div>
+            <div id="playerCheckboxes"></div>
+            <div class="selected-count" id="selectedCount"></div>
+            <div class="modal-buttons">
+                <button class="btn btn-danger" onclick="closePlayerModal()">Abbrechen</button>
+                <button class="btn btn-success" onclick="confirmPlayerSelection()">Bestätigen</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <!-- Debug Box Modal -->
+    <div id="debugModal" class="modal" style="display: none;">
+        <div class="modal-content" style="max-width: 95%; max-height: 70vh;">
+            <div class="modal-title">🐛 Debug & Verwaltung</div>
+            <div id="debugOutput" style="font-size: 11px; line-height: 1.4; background: #f5f5f5; padding: 1rem; border-radius: 4px; max-height: 500px; overflow-y: auto; font-family: 'Courier New', monospace; white-space: pre-wrap; word-break: break-all;"></div>
+            <div class="modal-buttons" style="margin-top: 1rem; display: flex; gap: 1rem; flex-wrap: wrap;">
+                <button class="btn btn-secondary" onclick="clearDebugLogs()">Logs löschen</button>
+                <button class="btn btn-danger" onclick="clearCache()">🗑️ Cache löschen</button>
+                <button class="btn btn-primary" onclick="closeDebugModal()">Schließen</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script>
+        // =====================================================
+        // CONFIGURATION
+        // =====================================================
+        const SUPABASE_URL = 'https://ijutfxwmtrvhvrmnljam.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlqdXRmeHdtdHJ2aHZybW5samFtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQyNjkzOTYsImV4cCI6MjA5OTg0NTM5Nn0.arTsOr0WWkDzjdzgGG5MqzGqvgteXALiPOXEl5_s9fw';
+        const DB_NAME = 'HandballDB_v3';
+        const COACHES = ['A', 'B', 'C', 'D'];
+        const MAX_TIMEOUTS_TOTAL = 3;
+        const MAX_TIMEOUTS_HALFTIME = 2;
+        
+        // =====================================================
+        // GLOBAL STATE
+        // =====================================================
+        let db = null;
+        let currentUser = null;
+        let games = [];
+        let players = [];
+        let coaches = [];
+        let currentGame = null;
+        let selectedPlayer = null;
+        let actionHistory = [];  // Speichert letzte Aktion für Undo
+        const MAX_HISTORY = 1;   // Nur letzter Schritt
+        let timerInterval = null;
+        let isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
+        let tempFieldPlayers = [];
+        let tempGoalkeepers = [];
+        let tempCoaches = [];
+        let selectionMode = 'field';
+        let lastAutoRefresh = null;
+        let autoRefreshCounter = 0;
+        let saveGameDebounceTimer = null;  // Debounce timer für saveCurrentGame
+        
+        // Überwache Online-Status zuverlässiger
+        const checkOnline = () => {
+            const wasOnline = isOnline;
+            isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
+            if (wasOnline !== isOnline) {
+                console.log('🌐 Online status changed: ' + isOnline);
+                updateSyncStatus();
+            }
+        };
+        
+        // Prüfe alle 5 Sekunden ob wir online sind
+        setInterval(checkOnline, 5000);
+
+        const FIELD_STATS = ['goals', 'goals7m', 'assists', 'turnovers', 'foulsReceived', 'missedShots', 'missedShots7m', 'technicalFouls', 'missedPasses', 'oneOnOneContra', 'yellowCard', 'twoMinute', 'redCard'];
+        const GK_STATS = ['saved', 'saved7m', 'conceded', 'conceded7m', 'assists', 'missedShots', 'missedShots7m', 'technicalFouls', 'missedPasses', 'turnovers', 'yellowCard', 'twoMinute', 'redCard'];
+        const COACH_STATS = ['yellowCard', 'twoMinute', 'redCard'];
+
+        // =====================================================
+        // DEBUG LOGGING
+        // =====================================================
+        let debugLogs = [];
+        
+        // Capture console.log in unsere Debug-Box
+        const originalLog = console.log;
+        console.log = function(...args) {
+            originalLog.apply(console, args);
+            const msg = args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ');
+            debugLogs.push('[LOG] ' + new Date().toLocaleTimeString() + ' ' + msg);
+            if (debugLogs.length > 100) debugLogs.shift();
+        };
+
+        const originalError = console.error;
+        console.error = function(...args) {
+            originalError.apply(console, args);
+            const msg = args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ');
+            debugLogs.push('[ERROR] ' + new Date().toLocaleTimeString() + ' ' + msg);
+            if (debugLogs.length > 100) debugLogs.shift();
+        };
+
+        function toggleDebugBox() {
+            const modal = document.getElementById('debugModal');
+            if (modal.style.display === 'flex') {
+                closeDebugModal();
+            } else {
+                openDebugModal();
+            }
+        }
+
+        function openDebugModal() {
+            document.getElementById('debugModal').style.display = 'flex';
+            document.getElementById('debugOutput').textContent = debugLogs.join('\n');
+            document.getElementById('debugOutput').scrollTop = document.getElementById('debugOutput').scrollHeight;
+        }
+
+        function closeDebugModal() {
+            document.getElementById('debugModal').style.display = 'none';
+        }
+
+        function clearCache() {
+            if (!confirm('IndexedDB Cache wirklich löschen? Die lokalen Daten werden entfernt.')) return;
+            
+            try {
+                // Lösche die Datenbank
+                const deleteReq = indexedDB.deleteDatabase(DB_NAME);
+                
+                deleteReq.onsuccess = () => {
+                    console.log('Cache gelöscht!');
+                    showToast('✓ Cache gelöscht! Seite wird neu geladen...');
+                    
+                    // Reload nach 1 Sekunde
+                    setTimeout(() => {
+                        location.reload();
+                    }, 1000);
+                };
+                
+                deleteReq.onerror = () => {
+                    console.error('Cache löschen fehlgeschlagen');
+                    showToast('⚠️ Fehler beim Cache löschen');
+                };
+            } catch (err) {
+                console.error('Exception:', err);
+                showToast('⚠️ Fehler beim Cache löschen');
+            }
+        }
+        window.addEventListener('load', initApp);
+        window.addEventListener('online', () => { isOnline = true; updateSyncStatus(); syncData(); });
+        window.addEventListener('offline', () => { isOnline = false; updateSyncStatus(); });
+
+        async function initApp() {
+            // Initialize Supabase
+            const sbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+            window.sbClient = sbClient;
+            
+            // Initialize IndexedDB
+            initIndexedDB();
+            
+            // Listen for auth changes - EINZIGE Quelle der Wahrheit
+            sbClient.auth.onAuthStateChange(async (event, session) => {
+                console.log('🔐 Auth state changed:', event, '| Has session:', session ? 'YES' : 'NO');
+                
+                if (session) {
+                    currentUser = session.user;
+                    console.log('✅ Authenticated:', currentUser.email);
+                    showApp();
+                    
+                    try {
+                        console.log('📥 Loading data from cloud...');
+                        await loadData();
+                        console.log('✅ Data loaded successfully');
+                    } catch (err) {
+                        console.error('❌ FATAL: loadData failed:', err.message);
+                    }
+                    
+                    // Auto-Sync aktuelles Spiel alle 2 Sekunden wenn Online
+                    if (!window.autoSaveInterval) {
+                        console.log('⏱️ Starting auto-save interval...');
+                        window.autoSaveInterval = setInterval(() => {
+                            if (isOnline && currentGame) {
+                                console.log('💾 Auto-save check...');
+                                saveCurrentGame();
+                            }
+                        }, 2000);
+                    }
+                    
+                    // Auto-Polling: Lade neue Spiele alle 3 Sekunden wenn Online
+                    if (!window.autoRefreshInterval) {
+                        console.log('⏰ Starting auto-refresh interval...');
+                        window.autoRefreshInterval = setInterval(() => {
+                            try {
+                                if (isOnline && currentUser) {
+                                    autoRefreshCounter++;
+                                    console.log('🔄 Auto-refresh poll #' + autoRefreshCounter + ' | User: ' + (currentUser ? 'OK' : 'MISSING'));
+                                    autoRefreshGames();
+                                } else {
+                                    if (!isOnline) console.log('⏸️ Skipped: Offline');
+                                    if (!currentUser) console.log('⏸️ Skipped: No user');
+                                }
+                            } catch (err) {
+                                console.error('❌ setInterval callback error:', err.message);
+                            }
+                        }, 3000);
+                    }
+                    
+                    console.log('✅ Auto-refresh polling gestartet (alle 3 Sekunden)');
+                } else {
+                    console.log('❌ NO SESSION - User not authenticated');
+                    currentUser = null;
+                    showAuthScreen();
+                    // Stoppe Intervals wenn logout
+                    if (window.autoSaveInterval) {
+                        clearInterval(window.autoSaveInterval);
+                        window.autoSaveInterval = null;
+                    }
+                    if (window.autoRefreshInterval) {
+                        clearInterval(window.autoRefreshInterval);
+                        window.autoRefreshInterval = null;
+                    }
+                }
+            });
+        }
+
+        // =====================================================
+        // INDEXED DB
+        // =====================================================
+        function initIndexedDB() {
+            return new Promise((resolve, reject) => {
+                try {
+                    const req = indexedDB.open(DB_NAME, 1);
+                    
+                    req.onerror = () => {
+                        console.error('IndexedDB open error:', req.error);
+                        reject(req.error);
+                    };
+                    
+                    req.onupgradeneeded = (e) => {
+                        const database = e.target.result;
+                        console.log('IndexedDB upgrade needed');
+                        if (!database.objectStoreNames.contains('games')) {
+                            database.createObjectStore('games', { keyPath: 'id' });
+                            console.log('Created games store');
+                        }
+                        if (!database.objectStoreNames.contains('players')) {
+                            database.createObjectStore('players', { keyPath: 'id' });
+                            console.log('Created players store');
+                        }
+                        if (!database.objectStoreNames.contains('coaches')) {
+                            database.createObjectStore('coaches', { keyPath: 'letter' });
+                            console.log('Created coaches store');
+                        }
+                    };
+                    
+                    req.onsuccess = () => {
+                        db = req.result;
+                        console.log('IndexedDB initialized successfully');
+                        resolve();
+                    };
+                } catch (err) {
+                    console.error('IndexedDB initialization exception:', err);
+                    reject(err);
+                }
+            });
+        }
+
+        function saveToIDB(storeName, data) {
+            return new Promise((resolve, reject) => {
+                if (!db) {
+                    console.warn('DB not initialized, attempting retry...');
+                    setTimeout(() => saveToIDB(storeName, data).then(resolve).catch(reject), 500);
+                    return;
+                }
+                
+                try {
+                    const tx = db.transaction([storeName], 'readwrite');
+                    tx.objectStore(storeName).put(data);
+                    tx.oncomplete = () => {
+                        console.log('Saved to IDB:', storeName);
+                        resolve();
+                    };
+                    tx.onerror = () => {
+                        console.error('IDB transaction error:', tx.error);
+                        reject(tx.error);
+                    };
+                } catch (err) {
+                    console.error('saveToIDB exception:', err);
+                    reject(err);
+                }
+            });
+        }
+
+        function getAllFromIDB(storeName) {
+            return new Promise((resolve, reject) => {
+                if (!db) {
+                    console.warn('DB not initialized, returning empty array');
+                    resolve([]);
+                    return;
+                }
+                
+                try {
+                    const tx = db.transaction([storeName], 'readonly');
+                    const req = tx.objectStore(storeName).getAll();
+                    req.onsuccess = () => {
+                        console.log('Loaded from IDB:', storeName, req.result.length, 'items');
+                        resolve(req.result);
+                    };
+                    req.onerror = () => {
+                        console.error('IDB getAll error:', req.error);
+                        reject(req.error);
+                    };
+                } catch (err) {
+                    console.error('getAllFromIDB exception:', err);
+                    reject(err);
+                }
+            });
+        }
+
+        function deleteFromIDB(storeName, key) {
+            return new Promise((resolve, reject) => {
+                if (!db) {
+                    console.warn('DB not initialized');
+                    resolve();
+                    return;
+                }
+                
+                try {
+                    const tx = db.transaction([storeName], 'readwrite');
+                    tx.objectStore(storeName).delete(key);
+                    tx.oncomplete = resolve;
+                    tx.onerror = () => reject(tx.error);
+                } catch (err) {
+                    console.error('deleteFromIDB exception:', err);
+                    reject(err);
+                }
+            });
+        }
+
+        // =====================================================
+        // AUTH
+        // =====================================================
+        async function handleLogin() {
+            const email = document.getElementById('loginEmail').value;
+            const password = document.getElementById('loginPassword').value;
+            const errorDiv = document.getElementById('loginError');
+
+            if (!email || !password) {
+                errorDiv.textContent = 'Bitte E-Mail und Passwort eingeben';
+                return;
+            }
+
+            try {
+                const { error } = await window.sbClient.auth.signInWithPassword({ email, password });
+                if (error) throw error;
+            } catch (err) {
+                errorDiv.textContent = err.message || 'Login fehlgeschlagen';
+            }
+        }
+
+        async function handleSignup() {
+            const name = document.getElementById('signupName').value;
+            const email = document.getElementById('signupEmail').value;
+            const password = document.getElementById('signupPassword').value;
+            const confirmPassword = document.getElementById('signupPasswordConfirm').value;
+            const errorDiv = document.getElementById('signupError');
+
+            if (!name || !email || !password) {
+                errorDiv.textContent = 'Bitte alle Felder ausfüllen';
+                return;
+            }
+
+            if (password !== confirmPassword) {
+                errorDiv.textContent = 'Passwörter stimmen nicht überein';
+                return;
+            }
+
+            try {
+                const { error } = await window.sbClient.auth.signUp({ email, password });
+                if (error) throw error;
+                errorDiv.textContent = '';
+                errorDiv.style.color = '#639922';
+                errorDiv.textContent = 'Registrierung erfolgreich!';
+            } catch (err) {
+                errorDiv.textContent = err.message || 'Registrierung fehlgeschlagen';
+            }
+        }
+
+        async function handleLogout() {
+            await window.sbClient.auth.signOut();
+        }
+
+        // =====================================================
+        // UNDO FUNKTIONALITÄT
+        // =====================================================
+        function undo() {
+            // Guard: Etwas zum Rückgängigmachen?
+            if (actionHistory.length === 0) {
+                showToast('⚠️ Nichts zum Rückgängigmachen');
+                return false;
+            }
+            
+            // Guard: Aktives Spiel?
+            if (!currentGame) {
+                showToast('⚠️ Kein Spiel aktiv');
+                return false;
+            }
+            
+            try {
+                const action = actionHistory.pop();
+                
+                switch (action.type) {
+                    case 'stat':
+                        const player = currentGame.players.find(p => p?.id === action.playerId);
+                        if (player) {
+                            player[action.stat] = action.oldValue;
+                            
+                            // WICHTIG: Berechne Gesamttore neu, wenn Tor rückgängig gemacht wurde
+                            if (action.stat === 'goals' || action.stat === 'goals7m') {
+                                currentGame.ownGoals = currentGame.players.reduce((s, pl) => s + (pl.goals || 0) + (pl.goals7m || 0), 0);
+                                console.log(`↶ Undo: Eigene Tore neu berechnet: ${currentGame.ownGoals}`);
+                            }
+                            
+                            // Berechne Gegentore neu, wenn Gegentreffer rückgängig gemacht wurde (für Torwart)
+                            if (action.stat === 'conceded' || action.stat === 'conceded7m') {
+                                currentGame.opponentGoals = currentGame.players.reduce((s, pl) => s + (pl.conceded || 0) + (pl.conceded7m || 0), 0);
+                                console.log(`↶ Undo: Gegentore neu berechnet: ${currentGame.opponentGoals}`);
+                            }
+                            
+                            // Stat-Labels für bessere Meldungen
+                            const statLabel = {
+                                'goals': 'Tor',
+                                'goals7m': 'Tor (7m)',
+                                'assists': 'Pass',
+                                'turnovers': 'Ballverlust',
+                                'foulsReceived': 'Foul',
+                                'missedShots': 'Fehlwurf',
+                                'missedShots7m': 'Fehlwurf (7m)',
+                                'technicalFouls': 'Tech. Fehler',
+                                'missedPasses': 'Fehlpass',
+                                'oneOnOneContra': '1:1 gegen',
+                                'yellowCard': 'Gelbe Karte',
+                                'twoMinute': '2 Minuten',
+                                'redCard': 'Rote Karte',
+                                'saved': 'Parade',
+                                'saved7m': 'Parade (7m)',
+                                'conceded': 'Gegentreffer',
+                                'conceded7m': 'Gegentreffer (7m)'
+                            }[action.stat] || action.stat;
+                            
+                            showToast(`↶ ${statLabel} von #${action.playerNumber} ${action.playerName} rückgängig gemacht`);
+                            console.log(`↶ Undo: ${statLabel} von ${action.playerName}`);
+                        }
+                        break;
+                    
+                    case 'score':
+                        currentGame.ownGoals = action.oldOwnGoals;
+                        currentGame.opponentGoals = action.oldOppGoals;
+                        showToast(`↶ Ergebnis von ${action.newOwnGoals}:${action.newOppGoals} auf ${action.oldOwnGoals}:${action.oldOppGoals} rückgängig gemacht`);
+                        console.log(`↶ Undo: Score rückgängig gemacht`);
+                        break;
+                }
+                
+                updateUndoButtonVisibility();
+                renderStats();
+                saveCurrentGame();
+                return true;
+                
+            } catch (err) {
+                console.error('❌ Undo-Fehler:', err);
+                showToast('⚠️ Fehler beim Rückgängigmachen');
+                return false;
+            }
+        }
+
+        function updateUndoButtonVisibility() {
+            const undoBtn = document.getElementById('undoBtn');
+            if (!undoBtn) return;
+            
+            // Zeige Button nur wenn:
+            // 1. Es etwas zum Undo gibt UND
+            // 2. Ein Spiel aktiv ist
+            if (actionHistory.length > 0 && currentGame) {
+                undoBtn.style.display = 'inline-block';  // ✅ Zeigen
+            } else {
+                undoBtn.style.display = 'none';  // ❌ Verstecken
+            }
+        }
+
+        // =====================================================
+        // KEYBOARD SHORTCUTS - ENTER-TASTE UNTERSTÜTZUNG
+        // =====================================================
+        // Enter-Taste aktiviert Login
+        document.getElementById('loginEmail')?.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                handleLogin();
+            }
+        });
+
+        document.getElementById('loginPassword')?.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                handleLogin();
+            }
+        });
+
+        // Enter-Taste aktiviert Signup
+        document.getElementById('signupName')?.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                handleSignup();
+            }
+        });
+
+        document.getElementById('signupEmail')?.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                handleSignup();
+            }
+        });
+
+        document.getElementById('signupPassword')?.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                handleSignup();
+            }
+        });
+
+        document.getElementById('signupPasswordConfirm')?.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                handleSignup();
+            }
+        });
+
+        // Strg+Z (oder Cmd+Z auf Mac) für Undo
+        document.addEventListener('keydown', (e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+                e.preventDefault();
+                undo();
+            }
+        });
+
+        // =====================================================
+        // DATA LOADING
+        // =====================================================
+        async function loadData() {
+            updateSyncStatus();
+            
+            if (isOnline) {
+                await loadFromCloud();
+            } else {
+                await loadFromIDB();
+            }
+            
+            renderAll();
+        }
+
+        // =====================================================
+        // AUTO-REFRESH
+        // =====================================================
+        async function autoRefreshGames() {
+            console.log('🔄 autoRefreshGames started');
+            
+            try {
+                if (!isOnline) {
+                    console.log('⏸️ Offline - skipping');
+                    return;
+                }
+                
+                if (!currentUser) {
+                    console.log('⏸️ No user - skipping');
+                    return;
+                }
+
+                if (!window.sbClient) {
+                    console.error('❌ No Supabase client');
+                    return;
+                }
+                
+                // Lade Spiele
+                console.log('📥 Fetching games...');
+                const { data: gamesData, error: gamesError } = await window.sbClient
+                    .from('games')
+                    .select('*')
+                    .eq('user_id', currentUser.id)
+                    .order('date', { ascending: false });
+
+                if (gamesError) {
+                    console.error('❌ Fetch error:', gamesError.message);
+                    return;
+                }
+
+                if (!gamesData || gamesData.length === 0) {
+                    console.log('✅ No games on server');
+                    return;
+                }
+
+                console.log('📊 Received ' + gamesData.length + ' games from server');
+
+                let hasChanges = false;
+                let currentGameWasUpdated = false;
+
+                // Für jedes Spiel vom Server
+                for (let dbGame of gamesData) {
+                    try {
+                        // Konvertiere von DB-Format
+                        const convertedGame = convertGameFromDB(dbGame);
+                        
+                        // Finde lokales Spiel
+                        let localGame = games.find(g => g.id === convertedGame.id);
+                        
+                        if (localGame) {
+                            // Spiel existiert lokal - check ob anders
+                            if (JSON.stringify(localGame) !== JSON.stringify(convertedGame)) {
+                                // Einfach: Wenn remote anders ist, übernimm remote
+                                // Das funktioniert weil wir schnell zu Supabase speichern
+                                console.log('♻️ Updating game: ' + convertedGame.opponent);
+                                games = games.filter(g => g.id !== convertedGame.id);
+                                games.push(convertedGame);
+                                hasChanges = true;
+                                
+                                // Wenn das aktuelle Spiel geändert, markiere für Re-Render
+                                if (currentGame && currentGame.id === convertedGame.id) {
+                                    currentGame = convertedGame;
+                                    currentGameWasUpdated = true;
+                                }
+                            }
+                        } else {
+                            // Neues Spiel vom Server
+                            console.log('➕ NEW game: ' + convertedGame.opponent);
+                            games.push(convertedGame);
+                            hasChanges = true;
+                        }
+                    } catch (err) {
+                        console.error('❌ Error converting game:', err.message);
+                    }
+                }
+
+                console.log('✅ Complete. hasChanges=' + hasChanges + ', currentGameUpdated=' + currentGameWasUpdated);
+                
+                // Nur rendern wenn nötig
+                if (currentGameWasUpdated) {
+                    console.log('🖼️ Re-rendering stats');
+                    try {
+                        renderStats();
+                    } catch (err) {
+                        console.error('❌ renderStats error:', err.message);
+                    }
+                }
+                
+                if (hasChanges) {
+                    console.log('🖼️ Re-rendering games list');
+                    try {
+                        renderGames();
+                    } catch (err) {
+                        console.error('❌ renderGames error:', err.message);
+                    }
+                }
+                
+                // Setze letzten Update-Zeit
+                lastAutoRefresh = Date.now();
+                
+            } catch (err) {
+                console.error('❌ FATAL error in autoRefreshGames:', err.message);
+            }
+        }
+
+        // Konvertiere Datenbank-Spalten (snake_case) zu App-Format (camelCase)
+        function convertGameFromDB(dbGame) {
+            try {
+                if (!dbGame) return null;
+                
+                return {
+                    id: dbGame.id,
+                    user_id: dbGame.user_id,
+                    opponent: dbGame.opponent || 'Unbekannt',
+                    name: dbGame.name || '',
+                    location: dbGame.location || '',
+                    league: dbGame.league || '',
+                    date: dbGame.date,
+                    players: dbGame.players || [],
+                    coaches: dbGame.coaches || COACHES.map(c => ({ letter: c, name: 'Betreuer ' + c, yellowCard: 0, twoMinute: 0, redCard: 0 })),
+                    timeouts: dbGame.timeouts || { total: 0, firstHalf: 0, secondHalf: 0 },
+                    opponentTimeouts: dbGame.opponent_timeouts || { total: 0, firstHalf: 0, secondHalf: 0 },
+                    ownGoals: dbGame.own_goals !== undefined ? dbGame.own_goals : 0,
+                    opponentGoals: dbGame.opponent_goals !== undefined ? dbGame.opponent_goals : 0,
+                    startTime: dbGame.start_time,
+                    totalPausedMs: dbGame.total_paused_ms || 0,
+                    logs: dbGame.logs || [],
+                    finished: dbGame.finished || false
+                };
+            } catch (err) {
+                console.error('Error converting game:', dbGame, err);
+                return null;
+            }
+        }
+
+        async function loadFromCloud() {
+            try {
+                console.log('Loading from cloud for user:', currentUser.id);
+                
+                // Load players first
+                const { data: playersData, error: playersError } = await window.sbClient
+                    .from('players')
+                    .select('*')
+                    .eq('user_id', currentUser.id);
+
+                console.log('Players data:', playersData, playersError);
+
+                if (playersError) throw playersError;
+
+                if (!playersData || playersData.length === 0) {
+                    console.log('No players found, creating default players...');
+                    const newPlayers = [
+                        ...Array.from({ length: 25 }, (_, i) => ({ 
+                            id: 'p_' + currentUser.id.substring(0, 8) + '_' + (i+1), 
+                            number: i+1, 
+                            name: 'Spieler ' + (i+1), 
+                            is_goalkeeper: false, 
+                            user_id: currentUser.id 
+                        })),
+                        ...Array.from({ length: 4 }, (_, i) => ({ 
+                            id: 'gk_' + currentUser.id.substring(0, 8) + '_' + (i+1), 
+                            number: i+1, 
+                            name: 'TW ' + (i+1), 
+                            is_goalkeeper: true, 
+                            user_id: currentUser.id 
+                        }))
+                    ];
+                    
+                    const { error: insertError, data: insertedData } = await window.sbClient.from('players').insert(newPlayers);
+                    if (insertError) {
+                        console.error('Error inserting players:', insertError);
+                        throw insertError;
+                    }
+                    
+                    console.log('Players created:', insertedData);
+                    players = newPlayers;
+                } else {
+                    players = playersData;
+                }
+
+                console.log('Players loaded:', players.length);
+
+                // Load coaches
+                const { data: coachesData, error: coachesError } = await window.sbClient
+                    .from('coaches')
+                    .select('*')
+                    .eq('user_id', currentUser.id);
+
+                if (!coachesError && coachesData) {
+                    coaches = coachesData;
+                    for (let coach of coaches) {
+                        await saveToIDB('coaches', coach);
+                    }
+                } else {
+                    // Default coaches wenn keine vorhanden
+                    coaches = COACHES.map(letter => ({
+                        letter: letter,
+                        name: 'Betreuer ' + letter,
+                        user_id: currentUser.id
+                    }));
+                }
+
+                console.log('Coaches loaded:', coaches.length);
+
+                // Save to IndexedDB
+                for (let player of players) {
+                    await saveToIDB('players', player);
+                }
+                
+                // Load games
+                const { data: gamesData, error: gamesError } = await window.sbClient
+                    .from('games')
+                    .select('*')
+                    .eq('user_id', currentUser.id)
+                    .order('date', { ascending: false });
+
+                console.log('Games data:', gamesData, gamesError);
+
+                if (gamesError) throw gamesError;
+
+                // Konvertiere alle Spiele von DB-Format zu App-Format
+                games = (gamesData || []).map(convertGameFromDB);
+                for (let game of games) {
+                    await saveToIDB('games', game);
+                }
+
+                console.log('Games loaded:', games.length);
+                updateSyncStatus();
+            } catch (err) {
+                console.error('Cloud load error:', err);
+                await loadFromIDB();
+            }
+        }
+
+        async function loadFromIDB() {
+            games = await getAllFromIDB('games');
+            players = await getAllFromIDB('players');
+            coaches = await getAllFromIDB('coaches') || COACHES.map(letter => ({
+                letter: letter,
+                name: 'Betreuer ' + letter,
+                user_id: currentUser.id
+            }));
+        }
+
+        // =====================================================
+        // SYNC
+        // =====================================================
+        async function syncData() {
+            if (!isOnline || !currentGame) return;
+
+            try {
+                const gameData = { ...currentGame, user_id: currentUser.id };
+                
+                const existing = await window.sbClient
+                    .from('games')
+                    .select('id')
+                    .eq('id', currentGame.id);
+
+                if (existing.data && existing.data.length > 0) {
+                    await window.sbClient.from('games').update(gameData).eq('id', currentGame.id);
+                } else {
+                    await window.sbClient.from('games').insert(gameData);
+                }
+
+                updateSyncStatus();
+            } catch (err) {
+                console.error('Sync error:', err);
+            }
+        }
+
+        function setupRealtimeSync() {
+            if (!window.sbClient) return;
+
+            window.sbClient.channel('games_changes')
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'games' }, 
+                    (payload) => {
+                        loadData();
+                    })
+                .subscribe();
+        }
+
+        // =====================================================
+        // UI
+        // =====================================================
+        function switchAuthTab(tab) {
+            document.querySelectorAll('.auth-tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.auth-tab-btn').forEach(b => b.classList.remove('active'));
+            document.getElementById(tab + 'Tab').classList.add('active');
+            event.target.classList.add('active');
+        }
+
+        function showAuthScreen() {
+            document.getElementById('authScreen').classList.add('show');
+            document.getElementById('mainApp').style.display = 'none';
+        }
+
+        function showApp() {
+            document.getElementById('authScreen').classList.remove('show');
+            document.getElementById('mainApp').style.display = 'flex';
+            document.getElementById('userEmail').textContent = currentUser?.email || 'User';
+        }
+
+        function switchTab(tab) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+            document.getElementById(tab).classList.add('active');
+            event.target.classList.add('active');
+            
+            if (tab === 'games') renderGames();
+            else if (tab === 'stats') renderStats();
+            else if (tab === 'analysis') renderAnalysis();
+            else if (tab === 'season') renderSeason();
+            else if (tab === 'players') renderPlayers();
+        }
+
+        function renderAll() {
+            renderGames();
+            renderStats();
+            renderAnalysis();
+            renderSeason();
+        }
+
+        function renderGames() {
+            const container = document.getElementById('games');
+            
+            container.innerHTML = '<div class="card"><div class="card-title">➕ Neues Spiel</div>' +
+                '<label class="form-label">Gegner*</label>' +
+                '<input type="text" class="form-input" id="gameOpponent" placeholder="z.B. RheinNeckar Löwen">' +
+                '<label class="form-label">Ort</label>' +
+                '<input type="text" class="form-input" id="gameLocation" placeholder="z.B. Viernheim">' +
+                '<div style="display: flex; gap: 1rem; margin-bottom: 1rem;">' +
+                    '<div style="flex: 1;">' +
+                        '<label class="form-label">Datum</label>' +
+                        '<input type="date" class="form-input" id="gameDate" style="margin-bottom: 0;">' +
+                    '</div>' +
+                    '<div style="flex: 1;">' +
+                        '<label class="form-label">Anwurfzeit</label>' +
+                        '<input type="time" class="form-input" id="gameTime" placeholder="19:30" style="margin-bottom: 0;">' +
+                    '</div>' +
+                '</div>' +
+                '<button class="btn btn-primary" onclick="openPlayerSelectionModal(\'field\')" style="width: 100%;">🆕 Spiel starten - Spieler auswählen</button>' +
+                '</div>';
+
+            // Status und Sync-Button
+            let pollStatus = lastAutoRefresh ? 'zuletzt: ' + Math.round((Date.now() - lastAutoRefresh) / 1000) + 's ago' : 'noch nicht geladen';
+            let statusHTML = '<div class="card" style="background: #f5f5f5; border-left: 4px solid ' + (isOnline ? '#4CAF50' : '#ff9800') + ';">' +
+                '<div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">' +
+                '<div style="font-weight: bold; flex-grow: 1;">' + (isOnline ? '🟢 Online' : '🔴 Offline') + ' | ' + games.length + ' Spiele | <span style="font-size: 11px; color: #666;">🔄 ' + pollStatus + '</span></div>' +
+                '<button class="btn btn-success" onclick="autoRefreshGames()" style="padding: 0.5rem 1rem;">🔄 Jetzt laden</button>' +
+                '<button class="btn btn-info" onclick="manualSyncAllGames()" style="padding: 0.5rem 1rem;">☁️ Alle Sync</button>' +
+                '</div></div>';
+            
+            container.innerHTML += statusHTML;
+
+            if (games.length > 0) {
+                container.innerHTML += '<div class="card"><div class="card-title">📋 Spiele (' + games.length + ')</div>' + 
+                    games.map(g => {
+                        const opponent = g.opponent || 'Unbekannt';
+                        const ownGoals = g.ownGoals !== undefined ? g.ownGoals : (g.own_goals || 0);
+                        const oppGoals = g.opponentGoals !== undefined ? g.opponentGoals : (g.opponent_goals || 0);
+                        const dateStr = g.date ? new Date(g.date).toLocaleDateString('de-DE') : 'Unbekannt';
+                        const timeStr = g.time || '–';
+                        
+                        return '<div class="card" onclick="selectGame(\'' + g.id + '\')" style="cursor: pointer; display: flex; justify-content: space-between; align-items: center; position: relative;">' +
+                        '<div><div class="card-title" style="margin: 0; font-size: 14px;">' + opponent + 
+                        (g.finished ? ' <span style="background: #639922; color: white; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 10px; margin-left: 0.5rem;">✓ BEENDET</span>' : '') + 
+                        '</div>' +
+                        '<div style="font-size: 11px; color: #999;">📅 ' + dateStr + ' ⏰ ' + timeStr + '</div></div>' +
+                        '<div style="font-size: 24px; font-weight: 700; color: #185fa5;">' + ownGoals + ':' + oppGoals + '</div>' +
+                        '<button class="btn btn-danger" style="padding: 0.5rem; min-height: auto;" onclick="event.stopPropagation(); deleteGame(\'' + g.id + '\');">Del</button>' +
+                        '</div>';
+                    }).join('') + '</div>';
+            } else {
+                container.innerHTML += '<div class="empty-state">Noch keine Spiele</div>';
+            }
+        }
+
+        function renderStats() {
+            const container = document.getElementById('stats');
+            
+            if (!currentGame) {
+                container.innerHTML = '<div class="empty-state">Kein Spiel ausgewählt</div>';
+                return;
+            }
+
+            // LIVE DEBUG PANEL - hilft auf Tablet zu sehen was passiert
+            const lastRefreshMs = lastAutoRefresh ? (Date.now() - lastAutoRefresh) : null;
+            const lastRefreshSec = lastRefreshMs ? Math.round(lastRefreshMs / 1000) : '?';
+            const userId = currentUser ? currentUser.id.substring(0, 8) : '?';
+            let debugPanel = '<div class="card" style="background: #f0f8ff; border-left: 4px solid #2196F3; font-size: 12px; margin-bottom: 1rem;">' +
+                '<div style="display: flex; justify-content: space-between; align-items: center;">' +
+                '<div>' +
+                '<span style="margin-right: 1rem;">🔄 Poll: ' + autoRefreshCounter + 'x</span>' +
+                '<span style="margin-right: 1rem;">⏱️ Letzte: ' + lastRefreshSec + 's</span>' +
+                '<span style="margin-right: 1rem;">📡 ' + (isOnline ? '🟢' : '🔴') + '</span>' +
+                '<span style="margin-right: 1rem;">👤 ' + userId + '</span>' +
+                '</div>' +
+                '<button class="btn btn-small" onclick="autoRefreshGames()" style="padding: 0.3rem 0.8rem; font-size: 11px;">🔄 Jetzt laden</button>' +
+                '</div></div>';
+            
+            const fieldPlayers = currentGame.players.filter(p => !p.isGoalkeeper && !p.is_goalkeeper);
+            const gks = currentGame.players.filter(p => p.isGoalkeeper || p.is_goalkeeper);
+            const elapsed = getElapsedSeconds();
+            const isHalftime = elapsed >= 1800;
+            const isRunning = timerInterval !== null;
+
+            let html = debugPanel + '<div class="scoreboard-sticky">' +
+                '<div style="font-size: 12px; margin-bottom: 0.5rem;">' + currentGame.opponent + ' • ' + currentGame.players.length + ' Spieler</div>' +
+                '<div class="timer">' + formatTime(elapsed) + (isHalftime ? ' <span class="halftime-badge">HALBZEIT</span>' : '') + '</div>' +
+                '<div class="timer-buttons">' +
+                '<button class="btn ' + (isRunning ? 'btn-warning' : 'btn-success') + '" onclick="toggleTimer()">' + (isRunning ? '⏸️ Pause' : '▶️ Start') + '</button>' +
+                '</div>' +
+                '<div class="score-display">' +
+                '<div class="score-team"><div style="font-size: 13px;">Wir</div><div class="score-number">' + (currentGame.ownGoals || 0) + '</div>' +
+                '<input type="number" min="0" value="' + (currentGame.ownGoals || 0) + '" style="width: 60px; text-align: center; margin-top: 0.5rem; font-size: 13px;" onchange="updateGameScore(this.value, ' + (currentGame.opponentGoals || 0) + ')">' +
+                '<div style="font-size: 16px; margin-top: 0.5rem; color: white; font-weight: 700;">⏸️ TO: ' + (currentGame.timeouts?.total || 0) + '/' + MAX_TIMEOUTS_TOTAL + '</div>' +
+                '<button class="btn btn-info" onclick="addTeamTimeout()" ' + ((currentGame.timeouts && currentGame.timeouts.total >= MAX_TIMEOUTS_TOTAL) ? 'disabled' : '') + ' style="width: 90%; margin-top: 0.3rem; padding: 0.5rem; font-size: 11px; min-height: 30px;">⏸️ Team</button>' +
+                '</div>' +
+                '<div style="font-size: 22px; font-weight: 600;">:</div>' +
+                '<div class="score-team"><div style="font-size: 13px;">Gegner</div><div class="score-number">' + (currentGame.opponentGoals || 0) + '</div>' +
+                '<input type="number" min="0" value="' + (currentGame.opponentGoals || 0) + '" style="width: 60px; text-align: center; margin-top: 0.5rem; font-size: 13px;" onchange="updateGameScore(' + (currentGame.ownGoals || 0) + ', this.value)">' +
+                '<div style="font-size: 16px; margin-top: 0.5rem; color: white; font-weight: 700;">⏸️ TO: ' + (currentGame.opponentTimeouts?.total || 0) + '/' + MAX_TIMEOUTS_TOTAL + '</div>' +
+                '<button class="btn btn-secondary" onclick="addOpponentTimeout()" ' + ((currentGame.opponentTimeouts && currentGame.opponentTimeouts.total >= MAX_TIMEOUTS_TOTAL) ? 'disabled' : '') + ' style="width: 90%; margin-top: 0.3rem; padding: 0.5rem; font-size: 11px; min-height: 30px; background: #f0f0f0; color: #666; border: 1px solid #ccc;">⏸️ Gegner</button>' +
+                '</div>' +
+                '</div>';
+
+            if (currentGame.logs && currentGame.logs.length > 0) {
+                html += '<div class="live-feed"><div style="font-size: 11px; font-weight: 600; opacity: 0.8; margin-bottom: 0.5rem;">📝 Letzte Erfassungen</div>';
+                currentGame.logs.forEach(log => {
+                    html += '<div class="feed-item"><strong>#' + log.number + ' ' + log.name + '</strong><br>' + log.time + ' • ' + log.action + '</div>';
+                });
+                html += '</div>';
+            }
+
+            html += '</div>';
+
+            // Feldspieler
+            if (fieldPlayers.length > 0) {
+                html += '<div class="card"><div class="card-title">🏐 Feldspieler (' + fieldPlayers.length + ')</div><div class="player-grid">' +
+                    fieldPlayers.map(p => '<button class="player-btn' + (selectedPlayer && selectedPlayer.id === p.id ? ' selected' : '') + '" onclick="selectPlayerFromGame(\'' + p.id + '\'); renderStats();">' +
+                    '<div>#' + p.number + '</div><div style="font-size: 12px;">' + p.name + '</div>' +
+                    '<div style="font-size: 11px;">⚽ ' + ((p.goals || 0) + (p.goals7m || 0)) + '</div></button>').join('') +
+                    '</div></div>';
+            }
+
+            if (selectedPlayer && !(selectedPlayer.isGoalkeeper || selectedPlayer.is_goalkeeper)) {
+                html += '<div class="card"><div class="card-title">📊 ' + selectedPlayer.name + '</div>' +
+                    '<div class="stat-buttons">' +
+                    '<button class="stat-btn plus" onclick="updateStat(\'' + selectedPlayer.id + '\', \'goals\', 1)">⚽ Feld</button>' +
+                    '<button class="stat-btn plus" onclick="updateStat(\'' + selectedPlayer.id + '\', \'goals7m\', 1)">🎯 7m</button>' +
+                    '<button class="stat-btn minus" onclick="updateStat(\'' + selectedPlayer.id + '\', \'missedShots\', 1)">❌ Fehlwurf</button>' +
+                    '<button class="stat-btn minus" onclick="updateStat(\'' + selectedPlayer.id + '\', \'missedShots7m\', 1)">❌ Fehlwurf 7m</button>' +
+                    '<button class="stat-btn minus" onclick="updateStat(\'' + selectedPlayer.id + '\', \'turnovers\', 1)">💔 Fehler</button>' +
+                    '<button class="stat-btn info" onclick="updateStat(\'' + selectedPlayer.id + '\', \'assists\', 1)">🤝 Pass</button>' +
+                    '<button class="stat-btn minus" onclick="updateStat(\'' + selectedPlayer.id + '\', \'technicalFouls\', 1)">🛑 Tech. Fehler</button>' +
+                    '<button class="stat-btn minus" onclick="updateStat(\'' + selectedPlayer.id + '\', \'yellowCard\', 1)">🟡 Gelb</button>' +
+                    '<button class="stat-btn minus" onclick="updateStat(\'' + selectedPlayer.id + '\', \'twoMinute\', 1)">⏱️ 2min</button>' +
+                    '<button class="stat-btn minus" onclick="updateStat(\'' + selectedPlayer.id + '\', \'redCard\', 1)">🔴 Rot</button>' +
+                    '</div></div>';
+            }
+
+            // Torwarte
+            if (gks.length > 0) {
+                html += '<div class="card"><div class="card-title">🥅 Torwarte (' + gks.length + ')</div><div class="player-grid">' +
+                    gks.map(p => '<button class="player-btn' + (selectedPlayer && selectedPlayer.id === p.id ? ' selected' : '') + '" onclick="selectPlayerFromGame(\'' + p.id + '\'); renderStats();">' +
+                    '<div>TW</div><div style="font-size: 12px;">' + p.name + '</div></button>').join('') +
+                    '</div></div>';
+            }
+
+            if (selectedPlayer && (selectedPlayer.isGoalkeeper || selectedPlayer.is_goalkeeper)) {
+                html += '<div class="card"><div class="card-title">📊 ' + selectedPlayer.name + '</div>' +
+                    '<div style="margin-bottom: 1.5rem;"><div style="font-size: 12px; font-weight: 600; color: #639922; margin-bottom: 0.75rem;">Abwehr / Paraden</div>' +
+                    '<div class="stat-buttons">' +
+                    '<button class="stat-btn plus" onclick="updateStat(\'' + selectedPlayer.id + '\', \'saved\', 1)">🛡️ Feldtor</button>' +
+                    '<button class="stat-btn plus" onclick="updateStat(\'' + selectedPlayer.id + '\', \'saved7m\', 1)">🎯 7m-Tor</button>' +
+                    '</div></div>' +
+                    '<div style="margin-bottom: 1.5rem;"><div style="font-size: 12px; font-weight: 600; color: #e24b4a; margin-bottom: 0.75rem;">Gegentore</div>' +
+                    '<div class="stat-buttons">' +
+                    '<button class="stat-btn minus" onclick="updateStat(\'' + selectedPlayer.id + '\', \'conceded\', 1)">📥 Feldtor</button>' +
+                    '<button class="stat-btn minus" onclick="updateStat(\'' + selectedPlayer.id + '\', \'conceded7m\', 1)">📥 7m-Tor</button>' +
+                    '</div></div>' +
+                    '<div style="margin-bottom: 1.5rem;"><div style="font-size: 12px; font-weight: 600; color: #185fa5; margin-bottom: 0.75rem;">Weitere Aktionen</div>' +
+                    '<div class="stat-buttons">' +
+                    '<button class="stat-btn info" onclick="updateStat(\'' + selectedPlayer.id + '\', \'assists\', 1)">🤝 Pass</button>' +
+                    '<button class="stat-btn minus" onclick="updateStat(\'' + selectedPlayer.id + '\', \'turnovers\', 1)">💔 Fehler</button>' +
+                    '<button class="stat-btn minus" onclick="updateStat(\'' + selectedPlayer.id + '\', \'technicalFouls\', 1)">🛑 Tech. Fehler</button>' +
+                    '</div></div>' +
+                    '<div><div style="font-size: 12px; font-weight: 600; color: #f39c12; margin-bottom: 0.75rem;">Strafen</div>' +
+                    '<div class="stat-buttons">' +
+                    '<button class="stat-btn minus" onclick="updateStat(\'' + selectedPlayer.id + '\', \'yellowCard\', 1)">🟡 Gelb</button>' +
+                    '<button class="stat-btn minus" onclick="updateStat(\'' + selectedPlayer.id + '\', \'twoMinute\', 1)">⏱️ 2min</button>' +
+                    '<button class="stat-btn minus" onclick="updateStat(\'' + selectedPlayer.id + '\', \'redCard\', 1)">🔴 Rot</button>' +
+                    '</div></div>' +
+                    '</div>';
+            }
+
+            // BETREUER STATS (für ausgewählten Betreuer)
+            if (selectedPlayer && selectedPlayer.isCoach) {
+                html += '<div class="card"><div class="card-title">📊 Betreuer ' + selectedPlayer.letter + '</div>' +
+                    '<div class="stat-buttons">' +
+                    '<button class="stat-btn minus" onclick="updateCoachStat(\'' + selectedPlayer.letter + '\', \'yellowCard\', 1)">🟡 Gelbe Karte</button>' +
+                    '<button class="stat-btn minus" onclick="updateCoachStat(\'' + selectedPlayer.letter + '\', \'twoMinute\', 1)">⏱️ 2min-Strafe</button>' +
+                    '<button class="stat-btn minus" onclick="updateCoachStat(\'' + selectedPlayer.letter + '\', \'redCard\', 1)">🔴 Rote Karte</button>' +
+                    '</div></div>';
+            }
+
+            // Betreuer VOR den Action-Buttons
+            if (currentGame.coaches && currentGame.coaches.length > 0) {
+                html += '<div class="card"><div class="card-title">👔 Betreuer</div><div class="player-grid">' +
+                    currentGame.coaches.map(c => {
+                        const coachData = coaches.find(coach => coach.letter === c.letter);
+                        const coachName = coachData ? coachData.name : 'Betreuer ' + c.letter;
+                        return '<button class="player-btn coach' + (selectedPlayer && selectedPlayer.letter === c.letter && selectedPlayer.isCoach ? ' selected' : '') + '" onclick="selectCoach(\'' + c.letter + '\'); renderStats();">' +
+                            '<div style="font-size: 14px; font-weight: bold;">' + c.letter + '</div>' +
+                            '<div style="font-size: 11px; font-weight: 600;">' + coachName + '</div>' +
+                            '<div style="font-size: 10px;">🟡 ' + (c.yellowCard || 0) + ' ⏱️ ' + (c.twoMinute || 0) + ' 🔴 ' + (c.redCard || 0) + '</div></button>';
+                    }).join('') +
+                    '</div></div>';
+            }
+
+            // Action-Buttons ganz am Ende
+            html += '<div style="display: flex; gap: 1rem; margin-top: 2rem; flex-wrap: wrap;"><button class="btn btn-success" onclick="saveCurrentGame(); showToast(\'Gespeichert!\');" style="flex: 1; min-width: 120px;">💾 Speichern</button><button class="btn btn-primary" onclick="exportToPDF();" style="flex: 1; min-width: 120px;">📄 PDF</button><button class="btn btn-warning" onclick="finishGame();" style="flex: 1; min-width: 120px;">🏁 Beenden</button><button class="btn btn-info" onclick="openAddPlayerModal();" style="flex: 1; min-width: 120px;">➕ Spieler hinzufügen</button></div>';
+            
+            container.innerHTML = html;
+        }
+
+        function openAddPlayerModal() {
+            if (!currentGame) {
+                showToast('Kein Spiel ausgewählt');
+                return;
+            }
+
+            // Spieler die NICHT im aktuellen Spiel sind
+            const usedPlayerIds = currentGame.players.map(p => p.id);
+            const availablePlayers = players.filter(p => !usedPlayerIds.includes(p.id));
+
+            if (availablePlayers.length === 0) {
+                showToast('Alle Spieler sind bereits im Spiel!');
+                return;
+            }
+
+            let html = '<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 0.5rem;">';
+            
+            availablePlayers.forEach(p => {
+                const isGK = p.is_goalkeeper || p.isGoalkeeper;
+                html += '<button class="player-btn" onclick="addPlayerToCurrentGame(\'' + p.id + '\'); closeAddPlayerModal();" style="background: ' + (isGK ? '#ffb366' : '#85c1e9') + ';"><strong>#' + p.number + '</strong><br>' + p.name.substring(0, 12) + '<br>' + (isGK ? '🥅' : '🏐') + '</button>';
+            });
+
+            html += '</div>';
+
+            const modal = document.getElementById('playerModal');
+            if (!modal) {
+                // Modal erstellen falls nicht vorhanden
+                const newModal = document.createElement('div');
+                newModal.id = 'playerModal';
+                newModal.className = 'modal';
+                newModal.style.display = 'flex';
+                newModal.innerHTML = '<div class="modal-content"><div class="modal-title">➕ Spieler hinzufügen</div><div id="playerModalContent"></div><div class="modal-buttons"><button class="btn btn-secondary" onclick="closeAddPlayerModal()">Abbrechen</button></div></div>';
+                document.body.appendChild(newModal);
+            }
+
+            document.getElementById('playerModalContent').innerHTML = html;
+            document.getElementById('playerModal').style.display = 'flex';
+        }
+
+        function closeAddPlayerModal() {
+            const modal = document.getElementById('playerModal');
+            if (modal) modal.style.display = 'none';
+        }
+
+        function addPlayerToCurrentGame(playerId) {
+            if (!currentGame) return;
+
+            const player = players.find(p => p.id === playerId);
+            if (!player) {
+                showToast('Spieler nicht gefunden');
+                return;
+            }
+
+            // Überprüfe ob Spieler bereits im Spiel ist
+            if (currentGame.players.find(p => p.id === playerId)) {
+                showToast('Spieler ist bereits im Spiel');
+                return;
+            }
+
+            // Füge Spieler zum Spiel hinzu
+            const isGK = player.is_goalkeeper || player.isGoalkeeper;
+            const newPlayer = {
+                id: player.id,
+                number: player.number,
+                name: player.name,
+                isGoalkeeper: isGK,
+                is_goalkeeper: isGK
+            };
+
+            // Initialisiere Stats
+            (isGK ? GK_STATS : FIELD_STATS).forEach(f => newPlayer[f] = 0);
+
+            currentGame.players.push(newPlayer);
+            saveCurrentGame();
+            renderStats();
+            showToast('✓ ' + player.name + ' hinzugefügt!');
+        }
+
+        function finishGame() {
+            if (!currentGame) return;
+            currentGame.finished = true;
+            saveCurrentGame();
+            stopTimer();
+            renderAll();
+            showToast('✓ Spiel beendet!');
+        }
+
+        function renderAnalysis() {
+            const container = document.getElementById('analysis');
+            
+            if (!currentGame) {
+                container.innerHTML = '<div class="empty-state">Kein Spiel ausgewählt</div>';
+                return;
+            }
+
+            const fieldPlayers = currentGame.players.filter(p => !p.isGoalkeeper && !p.is_goalkeeper).sort((a, b) => calcPlusMinus(b) - calcPlusMinus(a));
+            const gks = currentGame.players.filter(p => p.isGoalkeeper || p.isGoalkeeper);
+            
+            let html = '<div class="card"><div class="card-title">📊 Feldspieler</div>';
+            html += '<div style="overflow-x: auto;"><table class="stats-table" style="font-size: 11px; white-space: nowrap;"><tr><th style="text-align: center;">Nr</th><th style="text-align: left;">Name</th><th style="text-align: center;">⚽</th><th style="text-align: center;">❌</th><th style="text-align: center;">Quo%</th><th style="text-align: center;">🤝</th><th style="text-align: center;">Eff%</th><th style="text-align: center;">🛑</th><th style="text-align: center;">±</th></tr>';
+            
+            fieldPlayers.forEach(p => {
+                const goals = (p.goals || 0) + (p.goals7m || 0);
+                const missedWurfs = (p.missedShots || 0) + (p.missedShots7m || 0);
+                const quotePercent = calcShootingQuote(p);
+                const effectivenessPercent = calcHandlingEffectiveness(p);
+                const plusMinus = calcPlusMinus(p);
+                
+                html += '<tr><td style="text-align: center;">' + p.number + '</td><td style="text-align: left;">' + p.name + '</td><td style="text-align: center;">' + goals + '</td><td style="text-align: center;">' + missedWurfs + '</td><td style="text-align: center;">' + quotePercent + '</td><td style="text-align: center;">' + (p.assists || 0) + '</td><td style="text-align: center;">' + effectivenessPercent + '</td><td style="text-align: center;">' + (p.technicalFouls || 0) + '</td><td style="text-align: center; color: ' + (plusMinus >= 0 ? '#639922' : '#e24b4a') + '; font-weight: bold;">' + (plusMinus >= 0 ? '+' : '') + plusMinus + '</td></tr>';
+            });
+            
+            html += '</table></div></div>';
+
+            if (gks.length > 0) {
+                html += '<div class="card"><div class="card-title">🥅 Torwarte</div>';
+                html += '<div style="overflow-x: auto;"><table class="stats-table" style="font-size: 11px; white-space: nowrap;"><tr><th style="text-align: center;">Nr</th><th style="text-align: left;">Name</th><th style="text-align: center;">Parade</th><th style="text-align: center;">7m-Parade</th><th style="text-align: center;">Gegentor</th><th style="text-align: center;">7m-Gegentor</th><th style="text-align: center;">Quote</th><th style="text-align: center;">7m-Quote</th><th style="text-align: center;">🛑</th></tr>';
+                
+                gks.forEach(gk => {
+                    const fieldSaves = (gk.saved || 0);
+                    const sevenSaves = (gk.saved7m || 0);
+                    const fieldConceded = (gk.conceded || 0);
+                    const sevenConceded = (gk.conceded7m || 0);
+                    const fieldQuote = fieldConceded === 0 ? 0 : Math.round((fieldSaves / (fieldSaves + fieldConceded)) * 100);
+                    const sevenQuote = sevenConceded === 0 ? 0 : Math.round((sevenSaves / (sevenSaves + sevenConceded)) * 100);
+                    
+                    html += '<tr><td style="text-align: center;">TW ' + gk.number + '</td><td style="text-align: left;">' + gk.name + '</td><td style="text-align: center;">' + fieldSaves + '</td><td style="text-align: center;">' + sevenSaves + '</td><td style="text-align: center;">' + fieldConceded + '</td><td style="text-align: center;">' + sevenConceded + '</td><td style="text-align: center; color: #185fa5; font-weight: bold;">' + fieldQuote + '%</td><td style="text-align: center; color: #185fa5; font-weight: bold;">' + sevenQuote + '%</td><td style="text-align: center;">' + (gk.technicalFouls || 0) + '</td></tr>';
+                });
+                
+                html += '</table></div></div>';
+            }
+            
+            container.innerHTML = html;
+        }
+
+        function renderSeason() {
+            const container = document.getElementById('season');
+            
+            if (games.length === 0) {
+                container.innerHTML = '<div class="empty-state">Keine Spiele - Saison-Statistiken werden angezeigt wenn Spiele vorhanden sind</div>';
+                return;
+            }
+
+            // Sammle alle Spieler-Statistiken über alle Spiele
+            const playerStats = {};
+            
+            games.forEach(game => {
+                game.players.forEach(p => {
+                    if (!playerStats[p.id]) {
+                        playerStats[p.id] = {
+                            id: p.id,
+                            number: p.number,
+                            name: p.name,
+                            isGoalkeeper: p.isGoalkeeper,
+                            games: 0,
+                            goals: 0,
+                            goals7m: 0,
+                            assists: 0,
+                            turnovers: 0,
+                            missedShots: 0,
+                            missedShots7m: 0,
+                            technicalFouls: 0,
+                            yellowCard: 0,
+                            twoMinute: 0,
+                            redCard: 0,
+                            saved: 0,
+                            saved7m: 0,
+                            conceded: 0,
+                            conceded7m: 0
+                        };
+                    }
+                    
+                    playerStats[p.id].games++;
+                    playerStats[p.id].goals += (p.goals || 0);
+                    playerStats[p.id].goals7m += (p.goals7m || 0);
+                    playerStats[p.id].assists += (p.assists || 0);
+                    playerStats[p.id].turnovers += (p.turnovers || 0);
+                    playerStats[p.id].missedShots += (p.missedShots || 0);
+                    playerStats[p.id].missedShots7m += (p.missedShots7m || 0);
+                    playerStats[p.id].technicalFouls += (p.technicalFouls || 0);
+                    playerStats[p.id].yellowCard += (p.yellowCard || 0);
+                    playerStats[p.id].twoMinute += (p.twoMinute || 0);
+                    playerStats[p.id].redCard += (p.redCard || 0);
+                    playerStats[p.id].saved += (p.saved || 0);
+                    playerStats[p.id].saved7m += (p.saved7m || 0);
+                    playerStats[p.id].conceded += (p.conceded || 0);
+                    playerStats[p.id].conceded7m += (p.conceded7m || 0);
+                });
+            });
+
+            const fieldPlayers = Object.values(playerStats).filter(p => !p.isGoalkeeper).sort((a, b) => (b.goals + b.goals7m) - (a.goals + a.goals7m));
+            const gks = Object.values(playerStats).filter(p => p.isGoalkeeper);
+
+            let html = '<div class="card"><div class="card-title">📊 Saison-Übersicht</div>';
+            html += '<div style="font-size: 12px; padding: 1rem 0;">';
+            html += '<strong>Gespiele Spiele:</strong> ' + games.length + '<br>';
+            html += '<strong>Feldspieler:</strong> ' + fieldPlayers.length + '<br>';
+            html += '<strong>Torwarte:</strong> ' + gks.length;
+            html += '</div></div>';
+
+            if (fieldPlayers.length > 0) {
+                html += '<div class="card"><div class="card-title">🏐 Feldspieler Saison-Statistik</div>';
+                html += '<div style="overflow-x: auto;"><table class="stats-table" style="font-size: 11px; white-space: nowrap;"><tr><th style="text-align: center;">Nr</th><th style="text-align: left;">Name</th><th style="text-align: center;">Spiele</th><th style="text-align: center;">⚽/Spiel</th><th style="text-align: center;">🤝/Spiel</th><th style="text-align: center;">∑⚽</th><th style="text-align: center;">∑🤝</th><th style="text-align: center;">🛑</th></tr>';
+                
+                fieldPlayers.forEach(p => {
+                    const goalsPerGame = (p.games > 0 ? ((p.goals + p.goals7m) / p.games).toFixed(1) : 0);
+                    const assistsPerGame = (p.games > 0 ? (p.assists / p.games).toFixed(1) : 0);
+                    const totalGoals = p.goals + p.goals7m;
+                    
+                    html += '<tr><td style="text-align: center;">' + p.number + '</td><td style="text-align: left;">' + p.name + '</td><td style="text-align: center;">' + p.games + '</td><td style="text-align: center;">' + goalsPerGame + '</td><td style="text-align: center;">' + assistsPerGame + '</td><td style="text-align: center;">' + totalGoals + '</td><td style="text-align: center;">' + p.assists + '</td><td style="text-align: center;">' + p.technicalFouls + '</td></tr>';
+                });
+                
+                html += '</table></div></div>';
+            }
+
+            if (gks.length > 0) {
+                html += '<div class="card"><div class="card-title">🥅 Torwarte Saison-Statistik</div>';
+                html += '<div style="overflow-x: auto;"><table class="stats-table" style="font-size: 11px; white-space: nowrap;"><tr><th style="text-align: center;">Nr</th><th style="text-align: left;">Name</th><th style="text-align: center;">Spiele</th><th style="text-align: center;">Parade/Spiel</th><th style="text-align: center;">∑Parade</th><th style="text-align: center;">∑Gegentor</th><th style="text-align: center;">Quote %</th></tr>';
+                
+                gks.forEach(gk => {
+                    const savesPerGame = (gk.games > 0 ? (((gk.saved + gk.saved7m) / gk.games).toFixed(1)) : 0);
+                    const totalSaves = gk.saved + gk.saved7m;
+                    const totalConceded = gk.conceded + gk.conceded7m;
+                    const totalShots = totalSaves + totalConceded;
+                    const quote = totalShots === 0 ? 0 : Math.round((totalSaves / totalShots) * 100);
+                    
+                    html += '<tr><td style="text-align: center;">TW ' + gk.number + '</td><td style="text-align: left;">' + gk.name + '</td><td style="text-align: center;">' + gk.games + '</td><td style="text-align: center;">' + savesPerGame + '</td><td style="text-align: center;">' + totalSaves + '</td><td style="text-align: center;">' + totalConceded + '</td><td style="text-align: center; color: #185fa5; font-weight: bold;">' + quote + '%</td></tr>';
+                });
+                
+                html += '</table></div></div>';
+            }
+            
+            container.innerHTML = html;
+        }
+
+        function updateDebugPanel() {
+            const debugContainer = document.getElementById('debug-panel-container');
+            if (!debugContainer) return;
+            
+            let pollStatus = autoRefreshCounter > 0 ? (autoRefreshCounter + ' x aufgerufen') : 'noch nicht aktiv';
+            const userIdShort = currentUser ? currentUser.id.substring(0, 8) : '?';
+            const currentGameUserId = currentGame ? (currentGame.user_id ? currentGame.user_id.substring(0, 8) : 'KEINE!') : '-';
+            
+            let html = '<div class="card" style="background: #fff9e6; border-left: 4px solid #ff9800;">' +
+                '<div class="card-title" style="color: #ff9800; margin-bottom: 1rem;">🔧 Debug-Info (LIVE)</div>' +
+                '<table style="width: 100%; font-size: 12px; border-collapse: collapse;">' +
+                '<tr><td style="padding: 0.5rem; border-bottom: 1px solid #ddd;"><strong>Auth User ID:</strong></td><td style="padding: 0.5rem; border-bottom: 1px solid #ddd; font-family: monospace;">' + userIdShort + (currentUser ? '...' : '') + '</td></tr>' +
+                '<tr><td style="padding: 0.5rem; border-bottom: 1px solid #ddd;"><strong>Aktives Spiel:</strong></td><td style="padding: 0.5rem; border-bottom: 1px solid #ddd;">' + (currentGame ? currentGame.opponent : '❌ Kein Spiel') + '</td></tr>' +
+                '<tr><td style="padding: 0.5rem; border-bottom: 1px solid #ddd;"><strong>Spiel user_id:</strong></td><td style="padding: 0.5rem; border-bottom: 1px solid #ddd; font-family: monospace; ' + (currentGameUserId === 'KEINE!' ? 'color: red;' : '') + '">' + currentGameUserId + (currentGame && currentGame.user_id ? '...' : '') + '</td></tr>' +
+                '<tr><td style="padding: 0.5rem; border-bottom: 1px solid #ddd;"><strong>Online:</strong></td><td style="padding: 0.5rem; border-bottom: 1px solid #ddd;">' + (isOnline ? '🟢 Ja' : '🔴 Nein') + '</td></tr>' +
+                '<tr><td style="padding: 0.5rem; border-bottom: 1px solid #ddd;"><strong>Supabase Client:</strong></td><td style="padding: 0.5rem; border-bottom: 1px solid #ddd;">' + (window.sbClient ? '✅ Initialisiert' : '❌ Fehler') + '</td></tr>' +
+                '<tr><td style="padding: 0.5rem; border-bottom: 1px solid #ddd;"><strong>IndexedDB:</strong></td><td style="padding: 0.5rem; border-bottom: 1px solid #ddd;">' + (db ? '✅ Bereit' : '❌ Fehler') + '</td></tr>' +
+                '<tr><td style="padding: 0.5rem; border-bottom: 1px solid #ddd;"><strong>Lokale Spiele:</strong></td><td style="padding: 0.5rem;">' + games.length + ' | Spieler: ' + players.length + '</td></tr>' +
+                '<tr><td style="padding: 0.5rem;"><strong>Auto-Polling:</strong></td><td style="padding: 0.5rem; color: ' + (pollStatus.includes('aufgerufen') ? '#4caf50' : '#ff9800') + ';">' + pollStatus + '</td></tr>' +
+                '</table>' +
+                '</div>';
+            
+            debugContainer.innerHTML = html;
+        }
+        
+        function renderPlayers() {
+            const container = document.getElementById('players');
+            
+            // Nutze Debug Panel Container
+            let html = '<div id="debug-panel-container"></div>';
+            
+            // SPIELER TABELLEN
+            const fieldPlayers = players.filter(p => !p.is_goalkeeper && !p.isGoalkeeper).sort((a, b) => a.number - b.number);
+            const gks = players.filter(p => p.is_goalkeeper || p.isGoalkeeper).sort((a, b) => a.number - b.number);
+
+            html += '<div class="card"><div class="card-title">🏐 Feldspieler</div>';
+            html += '<table class="stats-table"><tr><th>Nr</th><th>Name</th><th>Aktion</th></tr>';
+            
+            fieldPlayers.forEach(p => {
+                html += '<tr><td><input type="number" id="number_' + p.id + '" value="' + p.number + '" style="width: 50px; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px; text-align: center;"></td>' +
+                        '<td><input type="text" id="name_' + p.id + '" value="' + p.name + '" style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px;"></td>' +
+                        '<td><button class="btn btn-success" style="padding: 0.5rem 1rem; font-size: 11px; min-height: auto;" onclick="saveSinglePlayer(\'' + p.id + '\')">Speichern</button></td></tr>';
+            });
+            
+            html += '</table></div>';
+
+            html += '<div class="card"><div class="card-title">🥅 Torwarte</div>';
+            html += '<table class="stats-table"><tr><th>Nr</th><th>Name</th><th>Aktion</th></tr>';
+            
+            gks.forEach(p => {
+                html += '<tr><td><input type="number" id="number_' + p.id + '" value="' + p.number + '" style="width: 50px; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px; text-align: center;"></td>' +
+                        '<td><input type="text" id="name_' + p.id + '" value="' + p.name + '" style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px;"></td>' +
+                        '<td><button class="btn btn-success" style="padding: 0.5rem 1rem; font-size: 11px; min-height: auto;" onclick="saveSinglePlayer(\'' + p.id + '\')">Speichern</button></td></tr>';
+            });
+            
+            html += '</table>';
+            html += '<button class="btn btn-primary" style="width: 100%; margin-top: 1rem;" onclick="saveAllPlayers()">💾 Alle Spieler speichern</button>';
+            html += '</div>';
+
+            // BETREUER - Standard A, B, C, D mit bearbeitbaren Namen
+            html += '<div class="card"><div class="card-title">👔 Betreuer (Standard Team)</div>';
+            html += '<table class="stats-table"><tr><th>Code</th><th>Name</th><th>Aktion</th></tr>';
+            
+            const coachLetters = ['A', 'B', 'C', 'D'];
+            coachLetters.forEach(letter => {
+                const coachData = coaches.find(c => c.letter === letter) || { letter: letter, name: 'Betreuer ' + letter };
+                html += '<tr><td><strong>' + letter + '</strong></td>' +
+                        '<td><input type="text" id="coach_name_' + letter + '" value="' + coachData.name + '" style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px;"></td>' +
+                        '<td><button class="btn btn-success" style="padding: 0.5rem 1rem; font-size: 11px; min-height: auto;" onclick="saveCoachName(\'' + letter + '\')">Speichern</button></td></tr>';
+            });
+            
+            html += '</table></div>';
+            
+            container.innerHTML = html;
+            
+            // Starte Live-Update für Debug Panel - alle 500ms aktualisieren
+            if (window.debugPanelInterval) clearInterval(window.debugPanelInterval);
+            window.debugPanelInterval = setInterval(() => {
+                updateDebugPanel();
+            }, 500);
+            
+            // Erste Aktualisierung sofort
+            updateDebugPanel();
+        }
+
+        async function saveSinglePlayer(playerId) {
+            const nameInput = document.getElementById('name_' + playerId);
+            const numberInput = document.getElementById('number_' + playerId);
+            if (!nameInput || !numberInput) return;
+            
+            const newName = nameInput.value.trim();
+            const newNumber = parseInt(numberInput.value) || 1;
+            
+            if (!newName) {
+                showToast('Name darf nicht leer sein!');
+                return;
+            }
+
+            const player = players.find(p => p.id === playerId);
+            if (!player) return;
+
+            player.name = newName;
+            player.number = newNumber;
+            
+            await saveToIDB('players', player);
+
+            if (isOnline) {
+                try {
+                    await window.sbClient.from('players').update({ name: newName, number: newNumber }).eq('id', playerId);
+                } catch (err) {
+                    console.log('Will sync when online');
+                }
+            }
+
+            showToast('✓ Spieler gespeichert!');
+        }
+
+        async function saveAllPlayers() {
+            let saved = 0;
+            
+            for (let player of players) {
+                const nameInput = document.getElementById('name_' + player.id);
+                const numberInput = document.getElementById('number_' + player.id);
+                if (!nameInput || !numberInput) continue;
+                
+                const newName = nameInput.value.trim();
+                const newNumber = parseInt(numberInput.value) || 1;
+                if (!newName) continue;
+
+                player.name = newName;
+                player.number = newNumber;
+                
+                await saveToIDB('players', player);
+
+                if (isOnline) {
+                    try {
+                        await window.sbClient.from('players').update({ name: newName, number: newNumber }).eq('id', player.id);
+                    } catch (err) {
+                        console.log('Will sync when online');
+                    }
+                }
+
+                saved++;
+            }
+
+            showToast('✓ ' + saved + ' Spieler gespeichert!');
+        }
+
+        // =====================================================
+        // GAME FUNCTIONS
+        // =====================================================
+        function openPlayerSelectionModal(mode) {
+            selectionMode = mode;
+            const isField = mode === 'field';
+            
+            // Guard: Spieler-Array valide?
+            if (!Array.isArray(players)) {
+                console.error('❌ openPlayerSelectionModal: players ist keine Array');
+                showToast('⚠️ Fehler beim Laden der Spieler');
+                return;
+            }
+            
+            // DEBUG: Zeige erste 3 Spieler
+            console.log('📋 First 3 players:', players.slice(0, 3));
+            
+            // Filter players by goalkeeper status
+            const availablePlayers = players
+                .filter(p => {
+                    // Valide Spieler? (ID oder mindestens Nummer)
+                    if (!p?.id && p?.number === undefined) {
+                        console.warn('⚠️ Spieler ohne ID und Number:', p);
+                        return false;
+                    }
+                    const isGK = p.is_goalkeeper === true || p.isGoalkeeper === true;
+                    return isField ? !isGK : isGK;
+                })
+                // Sortiere aufsteigend nach Nummer
+                .sort((a, b) => (a.number || 0) - (b.number || 0));
+            
+            console.log('✅ Available players for', mode, ':', availablePlayers.length);
+
+            if (availablePlayers.length === 0) {
+                showToast('Keine ' + (isField ? 'Feldspieler' : 'Torwarte') + ' vorhanden!');
+                return;
+            }
+
+            document.getElementById('modalTitle').textContent = isField ? 'Feldspieler auswählen (max 16)' : 'Torwarte auswählen (max 3)';
+
+            let html = '';
+            availablePlayers.forEach(p => {
+                // Verwende Number/Name mit sicheren Fallbacks
+                const playerNum = p.number || '?';
+                const playerName = p.name || 'Unbekannt';
+                html += `<label class="checkbox-item">
+                    <input type="checkbox" value="${p.id}" onchange="updateSelectedCount()">
+                    <span>#${playerNum} ${playerName}</span>
+                </label>`;
+            });
+
+            document.getElementById('playerCheckboxes').innerHTML = html;
+            updateSelectedCount();
+            document.getElementById('playerSelectionModal').classList.add('show');
+        }
+
+        function updateSelectedCount() {
+            const checked = document.querySelectorAll('#playerCheckboxes input:checked').length;
+            const max = selectionMode === 'field' ? 16 : 3;
+            document.getElementById('selectedCount').textContent = `${checked}/${max} ausgewählt`;
+        }
+
+        function confirmPlayerSelection() {
+            const selected = Array.from(document.querySelectorAll('#playerCheckboxes input:checked')).map(el => el.value);
+            
+            if (selected.length === 0) {
+                showToast(`Mindestens 1 ${selectionMode === 'field' ? 'Feldspieler' : 'Torwart'} erforderlich!`);
+                return;
+            }
+
+            if (selectionMode === 'field') {
+                tempFieldPlayers = selected;
+                closePlayerModal();
+                openPlayerSelectionModal('goalkeeper');
+            } else {
+                tempGoalkeepers = selected;
+                closePlayerModal();
+                createGameWithSelectedPlayers();
+            }
+        }
+
+        async function createGameWithSelectedPlayers() {
+            const opponent = document.getElementById('gameOpponent').value || 'Gegner';
+            const location = document.getElementById('gameLocation').value || '';
+            const gameDate = document.getElementById('gameDate').value || new Date().toISOString().split('T')[0];
+            const gameTime = document.getElementById('gameTime').value || '19:00';
+            
+            // Automatischer Name aus Datum + Uhrzeit
+            const name = gameDate + ' ' + gameTime;
+
+            const allSelectedIds = [...tempFieldPlayers, ...tempGoalkeepers];
+            
+            console.log('Creating game with players:', allSelectedIds);
+            console.log('Available players:', players);
+            
+            const newPlayers = players.filter(p => allSelectedIds.includes(p.id)).map(p => {
+                const isGK = p.is_goalkeeper || p.isGoalkeeper;
+                const s = { 
+                    id: p.id, 
+                    number: p.number, 
+                    name: p.name, 
+                    isGoalkeeper: isGK,
+                    is_goalkeeper: isGK
+                };
+                (isGK ? GK_STATS : FIELD_STATS).forEach(f => s[f] = 0);
+                return s;
+            });
+
+            console.log('New players for game:', newPlayers);
+
+            if (newPlayers.length === 0) {
+                showToast('Fehler beim Erstellen - Spieler nicht gefunden!');
+                return;
+            }
+
+            const gameId = 'g_' + currentUser.id.substring(0, 8) + '_' + Date.now();
+            const newGame = {
+                id: gameId,
+                user_id: currentUser.id,
+                opponent,
+                name,
+                location,
+                date: gameDate,
+                time: gameTime,
+                players: newPlayers,
+                coaches: COACHES.map(letter => {
+                    const coachData = coaches.find(c => c.letter === letter);
+                    return {
+                        letter: letter,
+                        name: coachData ? coachData.name : 'Betreuer ' + letter,
+                        yellowCard: 0,
+                        twoMinute: 0,
+                        redCard: 0
+                    };
+                }),
+                timeouts: {
+                    total: 0,
+                    firstHalf: 0,
+                    secondHalf: 0
+                },
+                opponentTimeouts: {
+                    total: 0,
+                    firstHalf: 0,
+                    secondHalf: 0
+                },
+                ownGoals: 0,
+                opponentGoals: 0,
+                startTime: null,
+                totalPausedMs: 0,
+                logs: [],
+                finished: false
+            };
+
+            console.log('Saving game:', newGame);
+
+            // WICHTIG: Erst lokal speichern
+            await saveToIDB('games', newGame);
+            console.log('Game saved to IndexedDB');
+
+            // Dann zu Supabase hochladen - MIT ALLEN SPALTEN
+            if (isOnline) {
+                try {
+                    console.log('Uploading to Supabase...');
+                    console.log('Current user:', currentUser);
+                    console.log('User ID:', currentUser?.id);
+                    
+                    if (!currentUser || !currentUser.id) {
+                        showToast('❌ Nicht angemeldet! Bitte neu laden.');
+                        return;
+                    }
+                    
+                    // Alle Spalten mit korrekten Snake_case Namen
+                    const gameForSupabase = {
+                        id: newGame.id,
+                        user_id: newGame.user_id,
+                        opponent: newGame.opponent,
+                        name: newGame.name,
+                        location: newGame.location,
+                        league: newGame.league,
+                        date: newGame.date,
+                        players: newGame.players,
+                        coaches: newGame.coaches || [],
+                        timeouts: newGame.timeouts || { total: 0, firstHalf: 0, secondHalf: 0 },
+                        opponent_timeouts: newGame.opponentTimeouts || { total: 0, firstHalf: 0, secondHalf: 0 },
+                        own_goals: newGame.ownGoals,
+                        opponent_goals: newGame.opponentGoals,
+                        start_time: newGame.startTime,
+                        total_paused_ms: newGame.totalPausedMs || 0,
+                        logs: newGame.logs || [],
+                        finished: newGame.finished || false
+                    };
+                    
+                    console.log('Uploading to Supabase:', gameForSupabase);
+                    const { data, error } = await window.sbClient.from('games').insert([gameForSupabase]);
+                    
+                    if (error) {
+                        console.error('Supabase INSERT error:', error);
+                        console.error('Error message:', error.message);
+                        console.error('Error details:', error.details);
+                        showToast('❌ Cloud-Fehler: ' + (error.message || 'Unbekannt') + ' (lokal gespeichert)');
+                    } else {
+                        console.log('Game successfully inserted into Supabase:', data);
+                        showToast('✅ Spiel zu Cloud hochgeladen!');
+                    }
+                } catch (err) {
+                    console.error('Exception during Supabase upload:', err);
+                    console.error('Exception message:', err.message);
+                    showToast('❌ Upload-Fehler: ' + err.message);
+                }
+            } else {
+                showToast('📱 Offline - Spiel wird später synced');
+            }
+
+            games.push(newGame);
+            currentGame = newGame;
+            tempFieldPlayers = [];
+            tempGoalkeepers = [];
+            
+            document.getElementById('gameOpponent').value = '';
+            document.getElementById('gameName').value = '';
+            document.getElementById('gameLocation').value = '';
+            document.getElementById('gameLeague').value = '';
+            
+            renderAll();
+            console.log('Game creation complete');
+        }
+
+        function closePlayerModal() {
+            document.getElementById('playerSelectionModal').classList.remove('show');
+        }
+
+        function selectGame(gameId) {
+            // Guard Clause 1: Valide Spiel-ID?
+            if (!gameId || typeof gameId !== 'string') {
+                console.error('❌ selectGame: Ungültige Spiel-ID');
+                showToast('⚠️ Fehler: Spiel konnte nicht geladen werden');
+                return false;
+            }
+            
+            // Guard Clause 2: Games-Array valide?
+            if (!Array.isArray(games)) {
+                console.error('❌ selectGame: games ist keine Array');
+                showToast('⚠️ Fehler: Spielliste nicht geladen');
+                return false;
+            }
+            
+            // Spiel suchen
+            const game = games.find(g => g?.id === gameId);
+            
+            // Guard Clause 3: Spiel nicht gefunden?
+            if (!game) {
+                console.error('❌ selectGame: Spiel #' + gameId + ' nicht gefunden');
+                showToast('⚠️ Spiel nicht gefunden');
+                return false;
+            }
+            
+            // Timer stoppen
+            stopTimer();
+            
+            // Spiel setzen
+            currentGame = game;
+            selectedPlayer = null;
+            
+            // Undo-History bei Spiel-Wechsel leeren
+            actionHistory = [];
+            
+            console.log('✅ Spiel geladen: ' + game.opponent);
+            
+            // Tab wechseln - mit Fallback
+            const statsTabButton = document.querySelector('[onclick="switchTab(\'stats\')"]');
+            if (statsTabButton) {
+                statsTabButton.click();
+            } else {
+                console.warn('⚠️ Stats-Button nicht gefunden, manueller Tab-Switch nötig');
+            }
+            
+            return true;
+        }
+
+        function selectPlayerFromGame(playerId) {
+            // Guard Clause 1: Kein Spiel aktiv
+            if (!currentGame) {
+                console.warn('⚠️ selectPlayerFromGame: Kein Spiel aktiv');
+                return false;
+            }
+            
+            // Guard Clause 2: Keine Spieler-ID
+            if (!playerId) {
+                console.warn('⚠️ selectPlayerFromGame: Keine Spieler-ID übergeben');
+                return false;
+            }
+            
+            // Guard Clause 3: Spieler-Array nicht valide
+            if (!Array.isArray(currentGame.players)) {
+                console.error('❌ selectPlayerFromGame: currentGame.players ist keine Array');
+                return false;
+            }
+            
+            // Spieler suchen (auch null-safe mit optional chaining)
+            const player = currentGame.players.find(x => x?.id === playerId);
+            
+            // Guard Clause 4: Spieler nicht gefunden
+            if (!player) {
+                console.error('❌ selectPlayerFromGame: Spieler #' + playerId + ' nicht gefunden');
+                return false;
+            }
+            
+            // Alles OK - Spieler setzen
+            selectedPlayer = player;
+            console.log('✅ Spieler ausgewählt: #' + player.number + ' ' + (player.name || 'Unbekannt'));
+            return true;
+        }
+
+        async function deleteGame(gameId) {
+            if (!confirm('Spiel wirklich löschen?')) return;
+
+            if (isOnline) {
+                try {
+                    console.log('Deleting game from Supabase:', gameId);
+                    const { error } = await window.sbClient
+                        .from('games')
+                        .delete()
+                        .eq('id', gameId)
+                        .eq('user_id', currentUser.id);
+                    
+                    if (error) {
+                        console.error('Delete error:', error);
+                        showToast('⚠️ Fehler beim Cloud-Löschen');
+                    } else {
+                        console.log('Game deleted from Supabase');
+                    }
+                } catch (err) {
+                    console.error('Delete exception:', err);
+                    showToast('⚠️ Fehler beim Löschen');
+                }
+            }
+
+            await deleteFromIDB('games', gameId);
+            games = games.filter(g => g.id !== gameId);
+            if (currentGame?.id === gameId) {
+                currentGame = null;
+                selectedPlayer = null;
+            }
+            renderAll();
+            showToast('✓ Spiel gelöscht!');
+        }
+
+        // =====================================================
+        // MANUAL SYNC
+        // =====================================================
+        async function manualSyncAllGames() {
+            if (!isOnline) {
+                showToast('❌ Nicht online - kann nicht synchronisieren');
+                return;
+            }
+
+            if (!currentUser || !currentUser.id) {
+                showToast('❌ Nicht angemeldet');
+                return;
+            }
+
+            showToast('🔄 Synchronisiere ' + games.length + ' Spiele...');
+            let synced = 0;
+            let failed = 0;
+
+            for (let game of games) {
+                try {
+                    const gameForSupabase = {
+                        id: game.id,
+                        user_id: game.user_id,
+                        opponent: game.opponent,
+                        name: game.name,
+                        location: game.location,
+                        league: game.league,
+                        date: game.date,
+                        players: game.players,
+                        coaches: game.coaches || [],
+                        timeouts: game.timeouts || { total: 0, firstHalf: 0, secondHalf: 0 },
+                        opponent_timeouts: game.opponentTimeouts || { total: 0, firstHalf: 0, secondHalf: 0 },
+                        own_goals: game.ownGoals,
+                        opponent_goals: game.opponentGoals,
+                        start_time: game.startTime,
+                        total_paused_ms: game.totalPausedMs || 0,
+                        logs: game.logs || [],
+                        finished: game.finished || false
+                    };
+
+                    // Prüfe ob Spiel existiert
+                    const existing = await window.sbClient
+                        .from('games')
+                        .select('id')
+                        .eq('id', game.id)
+                        .eq('user_id', currentUser.id);
+
+                    if (existing.data && existing.data.length > 0) {
+                        const { error } = await window.sbClient
+                            .from('games')
+                            .update(gameForSupabase)
+                            .eq('id', game.id)
+                            .eq('user_id', currentUser.id);
+                        
+                        if (error) {
+                            console.error('Update failed for game', game.id, error);
+                            console.error('Error details:', error.message, error.details);
+                            failed++;
+                        } else {
+                            console.log('Game synced:', game.id);
+                            synced++;
+                        }
+                    } else {
+                        const { error } = await window.sbClient
+                            .from('games')
+                            .insert([gameForSupabase]);
+                        
+                        if (error) {
+                            console.error('Insert failed for game', game.id, error);
+                            console.error('Error details:', error.message, error.details);
+                            failed++;
+                        } else {
+                            console.log('Game inserted:', game.id);
+                            synced++;
+                        }
+                    }
+                } catch (err) {
+                    console.error('Sync exception for game', game.id, err);
+                    failed++;
+                }
+            }
+
+            showToast('✅ Synchronisiert: ' + synced + ' ✓, ' + failed + ' ✗');
+            if (failed > 0) {
+                console.log('Check browser console for error details');
+            }
+            renderGames();
+        }
+
+        async function saveCurrentGame() {
+            if (!currentGame) return;
+
+            if (!currentGame.user_id) {
+                currentGame.user_id = currentUser.id;
+                console.log('⚠️ Game hatte keine user_id, setze auf:', currentGame.user_id.substring(0, 8) + '...');
+            }
+
+            // DEBOUNCE: Warte 500ms bis keine neuen Änderungen mehr kommen
+            // Das verhindert Race Conditions bei schnellen Änderungen
+            if (saveGameDebounceTimer) {
+                clearTimeout(saveGameDebounceTimer);
+                console.log('⏳ Debounce: Verwerfe alten Timer, starte neuen (500ms)');
+            }
+
+            saveGameDebounceTimer = setTimeout(async () => {
+                console.log('💾 Saving game to IDB:', currentGame.id, '| Goals: ' + currentGame.ownGoals + ':' + currentGame.opponentGoals);
+                await saveToIDBActual();
+                saveGameDebounceTimer = null;
+            }, 500);
+        }
+
+        async function saveToIDBActual() {
+            if (!currentGame) return;
+
+            console.log('💾 Saving game to IDB:', currentGame.id, '| Goals: ' + currentGame.ownGoals + ':' + currentGame.opponentGoals, '| user_id: ' + currentGame.user_id.substring(0, 8) + '...');
+            await saveToIDB('games', currentGame);
+
+            if (isOnline) {
+                try {
+                    console.log('☁️ Syncing to Supabase...');
+                    
+                    if (!currentUser || !currentUser.id) {
+                        console.error('❌ User not authenticated for sync');
+                        return;
+                    }
+                    
+                    if (currentGame.user_id !== currentUser.id) {
+                        console.error('❌ CRITICAL: Game user_id (' + currentGame.user_id.substring(0, 8) + '...) !== Auth user_id (' + currentUser.id.substring(0, 8) + '...)');
+                        showToast('❌ FEHLER: Falsche user_id! Browser zurücksetzen.');
+                        return;
+                    }
+                    
+                    // Alle Spalten mit korrekten Snake_case Namen
+                    const gameForSupabase = {
+                        id: currentGame.id,
+                        user_id: currentGame.user_id,
+                        opponent: currentGame.opponent,
+                        name: currentGame.name,
+                        location: currentGame.location,
+                        league: currentGame.league,
+                        date: currentGame.date,
+                        players: currentGame.players,
+                        coaches: currentGame.coaches || [],
+                        timeouts: currentGame.timeouts || { total: 0, firstHalf: 0, secondHalf: 0 },
+                        opponent_timeouts: currentGame.opponentTimeouts || { total: 0, firstHalf: 0, secondHalf: 0 },
+                        own_goals: currentGame.ownGoals,
+                        opponent_goals: currentGame.opponentGoals,
+                        start_time: currentGame.startTime,
+                        total_paused_ms: currentGame.totalPausedMs || 0,
+                        logs: currentGame.logs || [],
+                        finished: currentGame.finished || false
+                        // last_modified ist optional - wird von DB auto gesetzt wenn nötig
+                    };
+                    
+                    const existing = await window.sbClient
+                        .from('games')
+                        .select('id')
+                        .eq('id', currentGame.id)
+                        .eq('user_id', currentUser.id);
+
+                    if (existing.data && existing.data.length > 0) {
+                        console.log('📝 Updating existing game...');
+                        const { error: updateError } = await window.sbClient
+                            .from('games')
+                            .update(gameForSupabase)
+                            .eq('id', currentGame.id)
+                            .eq('user_id', currentUser.id);
+                        
+                        if (updateError) {
+                            console.error('❌ Update error:', updateError.message);
+                            console.error('Details:', updateError.details);
+                            console.error('Code:', updateError.code);
+                            console.error('Full error:', updateError);
+                            
+                            let errorMsg = '❌ Update fehlgeschlagen';
+                            if (updateError.message.includes('permission') || updateError.code === 'PGRST301') {
+                                errorMsg = '❌ RLS: Du darfst nicht schreiben! Check Supabase RLS Policies.';
+                            } else if (updateError.message.includes('column')) {
+                                errorMsg = '❌ Spalten-Fehler: ' + updateError.message;
+                            } else {
+                                errorMsg = '❌ ' + updateError.message;
+                            }
+                            showToast(errorMsg);
+                        } else {
+                            console.log('✅ Game updated on Supabase');
+                        }
+                    } else {
+                        console.log('🆕 Inserting new game...');
+                        const { error: insertError } = await window.sbClient
+                            .from('games')
+                            .insert([gameForSupabase]);
+                        
+                        if (insertError) {
+                            console.error('❌ Insert error:', insertError.message);
+                            console.error('Details:', insertError.details);
+                            console.error('Code:', insertError.code);
+                            console.error('Full error:', insertError);
+                            
+                            let errorMsg = '❌ Insert fehlgeschlagen';
+                            if (insertError.message.includes('permission') || insertError.code === 'PGRST301') {
+                                errorMsg = '❌ RLS: Du darfst nicht schreiben! Check Supabase RLS Policies.';
+                            } else if (insertError.message.includes('column')) {
+                                errorMsg = '❌ Spalten-Fehler: ' + insertError.message;
+                            } else {
+                                errorMsg = '❌ ' + insertError.message;
+                            }
+                            showToast(errorMsg);
+                        } else {
+                            console.log('✅ Game inserted to Supabase');
+                        }
+                    }
+                } catch (err) {
+                    console.error('❌ Sync exception:', err.message);
+                    showToast('⚠️ Sync-Fehler: ' + err.message);
+                }
+            } else {
+                console.log('📱 Offline - saved locally only');
+            }
+        }
+
+        // =====================================================
+        // STATISTICS
+        // =====================================================
+        function calcPlusMinus(stats) {
+            const pos = (stats.goals || 0) + (stats.goals7m || 0) + (stats.assists || 0) + (stats.saved || 0) + (stats.saved7m || 0);
+            const neg = (stats.turnovers || 0) + (stats.yellowCard || 0) + (stats.twoMinute || 0) + (stats.redCard || 0) + (stats.missedShots || 0) + (stats.missedShots7m || 0) + (stats.missedPasses || 0) + (stats.technicalFouls || 0) + (stats.oneOnOneContra || 0) + (stats.conceded || 0) + (stats.conceded7m || 0);
+            return pos - neg;
+        }
+
+        function calcHandlingEffectiveness(stats) {
+            const successful = (stats.goals || 0) + (stats.goals7m || 0) + (stats.assists || 0);
+            const total = successful + (stats.missedShots || 0) + (stats.missedShots7m || 0) + (stats.missedPasses || 0) + (stats.turnovers || 0);
+            return total === 0 ? 0 : Math.round((successful / total) * 100);
+        }
+
+        function calcShootingQuote(stats) {
+            const shots = (stats.goals || 0) + (stats.goals7m || 0) + (stats.missedShots || 0) + (stats.missedShots7m || 0);
+            const goals = (stats.goals || 0) + (stats.goals7m || 0);
+            return shots === 0 ? 0 : Math.round((goals / shots) * 100);
+        }
+
+        function updateStat(playerId, stat, delta) {
+            // Guard: Spiel aktiv?
+            if (!currentGame) {
+                console.warn('⚠️ updateStat: Kein Spiel aktiv');
+                return;
+            }
+            
+            // Guard: Spieler existiert?
+            const p = currentGame.players.find(x => x?.id === playerId);
+            if (!p) {
+                console.error('❌ updateStat: Spieler nicht gefunden');
+                return;
+            }
+            
+            // Alte Wert speichern BEVOR die Änderung
+            const oldValue = p[stat] || 0;
+            const newValue = Math.max(0, oldValue + delta);
+            
+            // UNDO-TRACKING: Speichere Action in History
+            if (oldValue !== newValue) {
+                actionHistory.push({
+                    type: 'stat',
+                    playerId: playerId,
+                    playerName: p.name || 'Unbekannt',
+                    playerNumber: p.number || '?',
+                    stat: stat,
+                    oldValue: oldValue,
+                    newValue: newValue,
+                    timestamp: Date.now()
+                });
+                if (actionHistory.length > MAX_HISTORY) {
+                    actionHistory.shift();
+                }
+            }
+            
+            // Normale Verarbeitung
+            p[stat] = newValue;
+
+            if (stat === 'goals' || stat === 'goals7m') {
+                currentGame.ownGoals = currentGame.players.reduce((s, pl) => s + (pl.goals || 0) + (pl.goals7m || 0), 0);
+            }
+            if (stat === 'conceded' || stat === 'conceded7m') {
+                currentGame.opponentGoals = currentGame.players.reduce((s, pl) => s + (pl.conceded || 0) + (pl.conceded7m || 0), 0);
+            }
+
+            if (!currentGame.logs) currentGame.logs = [];
+            const statName = { 'goals': '⚽ Feld', 'goals7m': '🎯 7m', 'assists': '🤝 Pass', 'turnovers': '💔 Fehler', 'conceded': '📥 Feldtor', 'conceded7m': '📥 7m-Tor', 'yellowCard': '🟡 Gelb', 'twoMinute': '⏱️ 2min', 'redCard': '🔴 Rot', 'saved': '🛡️ Feldtor', 'saved7m': '🎯 7m-Tor', 'missedShots': '❌ Fehlwurf', 'missedShots7m': '❌ Fehlwurf 7m', 'technicalFouls': '🛑 Tech. Fehler' }[stat] || stat;
+            currentGame.logs.unshift({
+                time: formatTime(getElapsedSeconds()),
+                number: p.number,
+                name: p.name,
+                action: statName
+            });
+            if (currentGame.logs.length > 3) currentGame.logs.pop();
+
+            updateUndoButtonVisibility();
+            renderStats();
+            saveCurrentGame();
+        }
+
+        function updateGameScore(own, opp) {
+            if (!currentGame) return;
+            
+            const oldOwnGoals = currentGame.ownGoals;
+            const oldOppGoals = currentGame.opponentGoals;
+            const newOwnGoals = Math.max(0, parseInt(own) || 0);
+            const newOppGoals = Math.max(0, parseInt(opp) || 0);
+            
+            // UNDO-TRACKING: Nur speichern wenn wirklich eine Änderung
+            if (oldOwnGoals !== newOwnGoals || oldOppGoals !== newOppGoals) {
+                actionHistory.push({
+                    type: 'score',
+                    oldOwnGoals: oldOwnGoals,
+                    oldOppGoals: oldOppGoals,
+                    newOwnGoals: newOwnGoals,
+                    newOppGoals: newOppGoals,
+                    timestamp: Date.now()
+                });
+                if (actionHistory.length > MAX_HISTORY) {
+                    actionHistory.shift();
+                }
+            }
+            
+            // Normale Verarbeitung
+            currentGame.ownGoals = newOwnGoals;
+            currentGame.opponentGoals = newOppGoals;
+            updateUndoButtonVisibility();
+            saveCurrentGame();
+            showToast('⚽ ' + currentGame.ownGoals + ':' + currentGame.opponentGoals);
+        }
+
+        function selectCoach(letter) {
+            selectedPlayer = { letter: letter, isCoach: true };
+        }
+
+        function updateCoachStat(letter, stat, delta) {
+            if (!currentGame) return;
+            const coach = currentGame.coaches.find(c => c.letter === letter);
+            if (!coach) return;
+            coach[stat] = Math.max(0, (coach[stat] || 0) + delta);
+            renderStats();
+            saveCurrentGame();
+        }
+
+        function addTeamTimeout() {
+            if (!currentGame || !currentGame.timeouts) {
+                currentGame.timeouts = { total: 0, firstHalf: 0, secondHalf: 0 };
+            }
+            
+            if (currentGame.timeouts.total >= MAX_TIMEOUTS_TOTAL) {
+                showToast('❌ Maximale Anzahl Timeouts erreicht!');
+                return;
+            }
+            
+            const elapsed = getElapsedSeconds();
+            const isSecondHalf = elapsed >= 1800;
+            const currentHalf = isSecondHalf ? 'secondHalf' : 'firstHalf';
+            
+            if (currentGame.timeouts[currentHalf] >= MAX_TIMEOUTS_HALFTIME) {
+                showToast('❌ Max ' + MAX_TIMEOUTS_HALFTIME + ' Timeouts pro Halbzeit!');
+                return;
+            }
+            
+            currentGame.timeouts.total++;
+            currentGame.timeouts[currentHalf]++;
+            
+            // ✅ Timer pausieren - speichere aktuelle Sekunde
+            currentGame.pausedSeconds = elapsed;
+            currentGame.pausedAtMs = Date.now();
+            stopTimer();
+            
+            saveCurrentGame();
+            renderStats();
+            showToast('⏸️ Team Timeout! Timer pausiert. (' + currentGame.timeouts.total + '/' + MAX_TIMEOUTS_TOTAL + ')');
+        }
+
+        function addOpponentTimeout() {
+            if (!currentGame || !currentGame.opponentTimeouts) {
+                currentGame.opponentTimeouts = { total: 0, firstHalf: 0, secondHalf: 0 };
+            }
+            
+            if (currentGame.opponentTimeouts.total >= MAX_TIMEOUTS_TOTAL) {
+                showToast('❌ Gegner: Max Timeouts erreicht!');
+                return;
+            }
+            
+            const elapsed = getElapsedSeconds();
+            const isSecondHalf = elapsed >= 1800;
+            const currentHalf = isSecondHalf ? 'secondHalf' : 'firstHalf';
+            
+            if (currentGame.opponentTimeouts[currentHalf] >= MAX_TIMEOUTS_HALFTIME) {
+                showToast('❌ Gegner: Max ' + MAX_TIMEOUTS_HALFTIME + ' Timeouts pro Halbzeit!');
+                return;
+            }
+            
+            currentGame.opponentTimeouts.total++;
+            currentGame.opponentTimeouts[currentHalf]++;
+            
+            // ✅ Timer pausieren - speichere aktuelle Sekunde
+            currentGame.pausedSeconds = elapsed;
+            currentGame.pausedAtMs = Date.now();
+            stopTimer();
+            
+            saveCurrentGame();
+            renderStats();
+            showToast('ℹ️ Gegner Timeout! Timer pausiert. (' + currentGame.opponentTimeouts.total + '/' + MAX_TIMEOUTS_TOTAL + ')');
+        }
+
+        // =====================================================
+        // COACH MANAGEMENT
+        // =====================================================
+        function saveCoachName(letter) {
+            const nameInput = document.getElementById('coach_name_' + letter);
+            if (!nameInput) return;
+            
+            const newName = nameInput.value.trim();
+            if (!newName) {
+                showToast('Name darf nicht leer sein!');
+                return;
+            }
+
+            let coach = coaches.find(c => c.letter === letter);
+            if (!coach) {
+                coach = { letter: letter, name: newName, user_id: currentUser.id };
+                coaches.push(coach);
+            } else {
+                coach.name = newName;
+            }
+
+            saveToIDB('coaches', coach);
+
+            if (isOnline) {
+                try {
+                    if (coach.id) {
+                        window.sbClient.from('coaches').update({ name: newName }).eq('id', coach.id).catch(err => console.error('Update coach error:', err));
+                    } else {
+                        window.sbClient.from('coaches').insert([{ letter: letter, user_id: currentUser.id, name: newName }]).catch(err => console.error('Insert coach error:', err));
+                    }
+                } catch (err) {
+                    console.log('Will sync when online');
+                }
+            }
+
+            showToast('✓ Betreuer ' + letter + ' gespeichert!');
+        }
+
+        // Legacy Funktionen für Kompatibilität
+        async function saveSingleCoach(coachId) {
+            return saveCoachName(coachId);
+        }
+
+        async function deleteCoach(coachId) {
+            // Nicht implementiert - Betreuer A,B,C,D können nicht gelöscht werden
+            showToast('Standard-Betreuer können nicht gelöscht werden');
+        }
+
+        function openAddCoachForm() {
+            showToast('Neue Betreuer werden über die Betreuer-Tabelle hinzugefügt');
+        }
+
+        function openCoachSelectionModal() {
+            showToast('Betreuer werden automatisch im Spiel verwendet');
+        }
+
+        function updateCoachCount() {
+            // Nicht nötig - Betreuer sind immer alle verfügbar
+        }
+
+        // =====================================================
+        // TIMER
+        // =====================================================
+        function toggleTimer() {
+            if (!currentGame) return;
+            
+            if (timerInterval) {
+                // PAUSE - Speichere nur die aktuelle Sekunde
+                currentGame.pausedSeconds = getElapsedSeconds();
+                currentGame.pausedAtMs = Date.now();
+                console.log('⏸️ Timer paused at: ' + currentGame.pausedSeconds + 's');
+                stopTimer();
+            } else {
+                // RESUME
+                if (!currentGame.startTime) {
+                    // Erstes Mal starten
+                    currentGame.startTime = Date.now();
+                    currentGame.totalPausedMs = 0;
+                    console.log('▶️ Timer started');
+                } else if (currentGame.pausedAtMs) {
+                    // Nach Pause: Berechne wie lange pausiert wurde
+                    const pausedForMs = Date.now() - currentGame.pausedAtMs;
+                    currentGame.totalPausedMs += pausedForMs;
+                    console.log('▶️ Timer resumed | Paused for: ' + pausedForMs + 'ms | Total paused: ' + currentGame.totalPausedMs + 'ms');
+                }
+                
+                currentGame.pausedSeconds = null;
+                currentGame.pausedAtMs = null;
+                startTimer();
+            }
+            saveCurrentGame();
+            renderStats();
+        }
+
+        function getElapsedSeconds() {
+            // Wenn pausiert: Zeige die gespeicherte Sekunde an (unverändert!)
+            if (currentGame && currentGame.pausedSeconds !== null && currentGame.pausedSeconds !== undefined) {
+                return currentGame.pausedSeconds;
+            }
+            
+            if (!currentGame || !currentGame.startTime) return 0;
+            
+            const now = Date.now();
+            const totalElapsed = now - currentGame.startTime;
+            const totalPaused = currentGame.totalPausedMs || 0;
+            
+            return Math.floor((totalElapsed - totalPaused) / 1000);
+        }
+
+        function startTimer() {
+            if (timerInterval || !currentGame) return;
+            timerInterval = setInterval(() => renderStats(), 1000);
+        }
+
+        function stopTimer() {
+            if (timerInterval) {
+                clearInterval(timerInterval);
+                timerInterval = null;
+            }
+        }
+
+        function formatTime(seconds) {
+            const mins = Math.floor(seconds / 60);
+            const secs = seconds % 60;
+            return (mins < 10 ? '0' : '') + mins + ':' + (secs < 10 ? '0' : '') + secs;
+        }
+
+        // =====================================================
+        // PDF EXPORT
+        // =====================================================
+        function exportToPDF() {
+            if (!currentGame) {
+                showToast('Kein Spiel ausgewählt!');
+                return;
+            }
+
+            // Markiere Spiel als beendet
+            currentGame.finished = true;
+            saveCurrentGame();
+
+            const fieldPlayers = currentGame.players.filter(p => !p.isGoalkeeper && !p.is_goalkeeper).sort((a, b) => calcPlusMinus(b) - calcPlusMinus(a));
+            const gks = currentGame.players.filter(p => p.isGoalkeeper || p.is_goalkeeper);
+
+            let htmlContent = '<div style="font-family: Arial, sans-serif; padding: 20px;">';
+            htmlContent += '<h1 style="text-align: center; color: #185fa5; margin-bottom: 10px;">Handball Statistik</h1>';
+            htmlContent += '<div style="text-align: center; margin-bottom: 20px; border-bottom: 2px solid #185fa5; padding-bottom: 15px;">';
+            htmlContent += '<p style="margin: 5px;"><strong>Spiel:</strong> ' + currentGame.opponent + '</p>';
+            htmlContent += '<p style="margin: 5px;"><strong>Datum:</strong> ' + new Date(currentGame.date).toLocaleDateString('de-DE') + '</p>';
+            htmlContent += '<p style="margin: 5px;"><strong>Ergebnis:</strong> ' + currentGame.ownGoals + ':' + currentGame.opponentGoals + '</p>';
+            if (currentGame.location) htmlContent += '<p style="margin: 5px;"><strong>Ort:</strong> ' + currentGame.location + '</p>';
+            htmlContent += '</div>';
+
+            if (fieldPlayers.length > 0) {
+                htmlContent += '<h2 style="color: #185fa5;">🏐 Feldspieler</h2>';
+                htmlContent += '<table style="width: 100%; border-collapse: collapse; font-size: 11px;">';
+                htmlContent += '<tr style="background: #f5f5f5;"><th style="border: 1px solid #ddd; padding: 6px;">Nr</th><th style="border: 1px solid #ddd; padding: 6px;">Name</th><th style="border: 1px solid #ddd; padding: 6px;">⚽</th><th style="border: 1px solid #ddd; padding: 6px;">❌</th><th style="border: 1px solid #ddd; padding: 6px;">%</th><th style="border: 1px solid #ddd; padding: 6px;">🤝</th><th style="border: 1px solid #ddd; padding: 6px;">E%</th><th style="border: 1px solid #ddd; padding: 6px;">±</th></tr>';
+                fieldPlayers.forEach(p => {
+                    const goals = (p.goals || 0) + (p.goals7m || 0);
+                    const missed = (p.missedShots || 0) + (p.missedShots7m || 0);
+                    htmlContent += '<tr><td style="border: 1px solid #ddd; padding: 6px;">' + p.number + '</td><td style="border: 1px solid #ddd; padding: 6px;">' + p.name + '</td><td style="border: 1px solid #ddd; padding: 6px; text-align: center;">' + goals + '</td><td style="border: 1px solid #ddd; padding: 6px; text-align: center;">' + missed + '</td><td style="border: 1px solid #ddd; padding: 6px; text-align: center;">' + calcShootingQuote(p) + '</td><td style="border: 1px solid #ddd; padding: 6px; text-align: center;">' + (p.assists || 0) + '</td><td style="border: 1px solid #ddd; padding: 6px; text-align: center;">' + calcHandlingEffectiveness(p) + '</td><td style="border: 1px solid #ddd; padding: 6px; text-align: center; color: ' + (calcPlusMinus(p) >= 0 ? '#639922' : '#e24b4a') + '; font-weight: bold;">' + (calcPlusMinus(p) >= 0 ? '+' : '') + calcPlusMinus(p) + '</td></tr>';
+                });
+                htmlContent += '</table>';
+            }
+
+            if (gks.length > 0) {
+                htmlContent += '<h2 style="color: #185fa5;">🥅 Torwarte</h2>';
+                htmlContent += '<table style="width: 100%; border-collapse: collapse; font-size: 11px;">';
+                htmlContent += '<tr style="background: #f5f5f5;"><th style="border: 1px solid #ddd; padding: 6px;">Name</th><th style="border: 1px solid #ddd; padding: 6px;">Feld-Par</th><th style="border: 1px solid #ddd; padding: 6px;">7m-Par</th><th style="border: 1px solid #ddd; padding: 6px;">Feld-Tor</th><th style="border: 1px solid #ddd; padding: 6px;">7m-Tor</th><th style="border: 1px solid #ddd; padding: 6px;">Quote</th></tr>';
+                gks.forEach(gk => {
+                    const fieldSaves = (gk.saved || 0);
+                    const sevenSaves = (gk.saved7m || 0);
+                    const fieldConceded = (gk.conceded || 0);
+                    const sevenConceded = (gk.conceded7m || 0);
+                    const fieldQuote = fieldConceded === 0 ? 0 : Math.round((fieldSaves / (fieldSaves + fieldConceded)) * 100);
+                    const sevenQuote = sevenConceded === 0 ? 0 : Math.round((sevenSaves / (sevenSaves + sevenConceded)) * 100);
+                    htmlContent += '<tr><td style="border: 1px solid #ddd; padding: 6px;">' + gk.name + '</td><td style="border: 1px solid #ddd; padding: 6px; text-align: center;">' + fieldSaves + '</td><td style="border: 1px solid #ddd; padding: 6px; text-align: center;">' + sevenSaves + '</td><td style="border: 1px solid #ddd; padding: 6px; text-align: center;">' + fieldConceded + '</td><td style="border: 1px solid #ddd; padding: 6px; text-align: center;">' + sevenConceded + '</td><td style="border: 1px solid #ddd; padding: 6px; text-align: center; color: #185fa5; font-weight: bold;">' + fieldQuote + '%/' + sevenQuote + '%</td></tr>';
+                });
+                htmlContent += '</table>';
+            }
+
+            htmlContent += '</div>';
+
+            const opt = {
+                margin: 10,
+                filename: 'Handball_' + currentGame.opponent + '_' + new Date(currentGame.date).toLocaleDateString('de-DE').replace(/\./g, '-') + '.pdf',
+                image: { type: 'jpeg', quality: 0.98 },
+                html2canvas: { scale: 2 },
+                jsPDF: { orientation: 'landscape', unit: 'mm', format: 'a4' }
+            };
+
+            html2pdf().set(opt).from(htmlContent).save();
+            showToast('📄 PDF exportiert!');
+        }
+
+        // =====================================================
+        // UTILITY
+        // =====================================================
+        function updateSyncStatus() {
+            const syncDot = document.getElementById('syncDot');
+            const syncStatus = document.getElementById('syncStatus');
+
+            if (!isOnline) {
+                syncDot.className = 'sync-dot offline';
+                syncStatus.textContent = 'Offline';
+            } else {
+                syncDot.className = 'sync-dot';
+                syncStatus.textContent = 'Synced';
+            }
+        }
+
+        function showToast(msg) {
+            const toast = document.getElementById('toast');
+            toast.textContent = msg;
+            toast.classList.add('show');
+            setTimeout(() => toast.classList.remove('show'), 2000);
+        }
+
+        async function testSupabaseConnection() {
+            console.log('Testing Supabase connection...');
+            showToast('🧪 Teste Supabase-Verbindung...');
+
+            try {
+                if (!window.sbClient) {
+                    showToast('❌ Supabase Client nicht initialisiert');
+                    return;
+                }
+
+                if (!currentUser || !currentUser.id) {
+                    showToast('❌ Nicht authentifiziert');
+                    return;
+                }
+
+                // Test 1: Games table exists and is readable
+                console.log('Test 1: Games table select');
+                const { data: testGames, error: gamesError } = await window.sbClient
+                    .from('games')
+                    .select('id')
+                    .eq('user_id', currentUser.id)
+                    .limit(1);
+
+                if (gamesError) {
+                    console.error('Games table error:', gamesError);
+                    showToast('❌ Games Table Error: ' + gamesError.message);
+                    return;
+                } else {
+                    console.log('✅ Games table readable, found ' + testGames.length + ' games');
+                }
+
+                // Test 2: Try to insert a test game
+                console.log('Test 2: Insert test');
+                const testGameId = 'test_' + Date.now();
+                const { error: insertError } = await window.sbClient
+                    .from('games')
+                    .insert([{
+                        id: testGameId,
+                        user_id: currentUser.id,
+                        opponent: 'Test',
+                        name: 'Test Game',
+                        date: new Date().toISOString(),
+                        players: [],
+                        coaches: [],
+                        timeouts: { total: 0, firstHalf: 0, secondHalf: 0 },
+                        own_goals: 0,
+                        opponent_goals: 0,
+                        finished: false
+                    }]);
+
+                if (insertError) {
+                    console.error('Insert test error:', insertError);
+                    showToast('❌ Insert Error: ' + insertError.message);
+                    return;
+                } else {
+                    console.log('✅ Insert successful');
+                    
+                    // Delete test game
+                    await window.sbClient
+                        .from('games')
+                        .delete()
+                        .eq('id', testGameId);
+                    console.log('✅ Test game deleted');
+                }
+
+                showToast('✅ Supabase funktioniert perfekt!');
+            } catch (err) {
+                console.error('Connection test exception:', err);
+                showToast('❌ Exception: ' + err.message);
+            }
+        }
+    </script>
+</body>
+</html>

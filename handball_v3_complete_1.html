@@ -889,6 +889,7 @@
                     players: dbGame.players || [],
                     coaches: dbGame.coaches || COACHES.map(c => ({ letter: c, name: 'Betreuer ' + c, yellowCard: 0, twoMinute: 0, redCard: 0 })),
                     timeouts: dbGame.timeouts || { total: 0, firstHalf: 0, secondHalf: 0 },
+                    opponentTimeouts: dbGame.opponent_timeouts || { total: 0, firstHalf: 0, secondHalf: 0 },
                     ownGoals: dbGame.own_goals !== undefined ? dbGame.own_goals : 0,
                     opponentGoals: dbGame.opponent_goals !== undefined ? dbGame.opponent_goals : 0,
                     startTime: dbGame.start_time,
@@ -1181,10 +1182,16 @@
                 '</div>' +
                 '<div class="score-display">' +
                 '<div class="score-team"><div style="font-size: 13px;">Wir</div><div class="score-number">' + (currentGame.ownGoals || 0) + '</div>' +
-                '<input type="number" min="0" value="' + (currentGame.ownGoals || 0) + '" style="width: 60px; text-align: center; margin-top: 0.5rem; font-size: 13px;" onchange="updateGameScore(this.value, ' + (currentGame.opponentGoals || 0) + ')"></div>' +
+                '<input type="number" min="0" value="' + (currentGame.ownGoals || 0) + '" style="width: 60px; text-align: center; margin-top: 0.5rem; font-size: 13px;" onchange="updateGameScore(this.value, ' + (currentGame.opponentGoals || 0) + ')">' +
+                '<div style="font-size: 11px; margin-top: 0.5rem; color: #666; font-weight: 600;">⏸️ TO: ' + (currentGame.timeouts?.total || 0) + '/' + MAX_TIMEOUTS_TOTAL + '</div>' +
+                '<button class="btn btn-info" onclick="addTeamTimeout()" ' + ((currentGame.timeouts && currentGame.timeouts.total >= MAX_TIMEOUTS_TOTAL) ? 'disabled' : '') + ' style="width: 90%; margin-top: 0.3rem; padding: 0.5rem; font-size: 11px; min-height: 30px;">⏸️ Team</button>' +
+                '</div>' +
                 '<div style="font-size: 22px; font-weight: 600;">:</div>' +
                 '<div class="score-team"><div style="font-size: 13px;">Gegner</div><div class="score-number">' + (currentGame.opponentGoals || 0) + '</div>' +
-                '<input type="number" min="0" value="' + (currentGame.opponentGoals || 0) + '" style="width: 60px; text-align: center; margin-top: 0.5rem; font-size: 13px;" onchange="updateGameScore(' + (currentGame.ownGoals || 0) + ', this.value)"></div>' +
+                '<input type="number" min="0" value="' + (currentGame.opponentGoals || 0) + '" style="width: 60px; text-align: center; margin-top: 0.5rem; font-size: 13px;" onchange="updateGameScore(' + (currentGame.ownGoals || 0) + ', this.value)">' +
+                '<div style="font-size: 11px; margin-top: 0.5rem; color: #666; font-weight: 600;">⏸️ TO: ' + (currentGame.opponentTimeouts?.total || 0) + '/' + MAX_TIMEOUTS_TOTAL + '</div>' +
+                '<button class="btn btn-secondary" onclick="addOpponentTimeout()" ' + ((currentGame.opponentTimeouts && currentGame.opponentTimeouts.total >= MAX_TIMEOUTS_TOTAL) ? 'disabled' : '') + ' style="width: 90%; margin-top: 0.3rem; padding: 0.5rem; font-size: 11px; min-height: 30px; background: #f0f0f0; color: #666; border: 1px solid #ccc;">⏸️ Gegner</button>' +
+                '</div>' +
                 '</div>';
 
             if (currentGame.logs && currentGame.logs.length > 0) {
@@ -1230,28 +1237,6 @@
                     '</div></div>';
             }
 
-            // TIMEOUT DISPLAY
-            html += '<div class="timeout-display">' +
-                '<div class="timeout-item"><div class="timeout-count">' + (currentGame.timeouts.total || 0) + '/' + MAX_TIMEOUTS_TOTAL + '</div><div class="timeout-label">Gesamt Timeouts</div></div>' +
-                '<div class="timeout-item"><div class="timeout-count">' + (currentGame.timeouts.firstHalf || 0) + '/' + MAX_TIMEOUTS_HALFTIME + '</div><div class="timeout-halftime">1. Halbzeit</div></div>' +
-                '<div class="timeout-item"><div class="timeout-count">' + (currentGame.timeouts.secondHalf || 0) + '/' + MAX_TIMEOUTS_HALFTIME + '</div><div class="timeout-halftime">2. Halbzeit</div></div>' +
-                '<div style="flex: 1; text-align: center;"><button class="btn btn-info" onclick="addTeamTimeout()" ' + ((currentGame.timeouts && currentGame.timeouts.total >= MAX_TIMEOUTS_TOTAL) ? 'disabled' : '') + '>⏸️ Team Timeout</button></div>' +
-                '</div>';
-
-            // Betreuer
-            if (currentGame.coaches && currentGame.coaches.length > 0) {
-                html += '<div class="card"><div class="card-title">👔 Betreuer</div><div class="player-grid">' +
-                    currentGame.coaches.map(c => {
-                        const coachData = coaches.find(coach => coach.letter === c.letter);
-                        const coachName = coachData ? coachData.name : 'Betreuer ' + c.letter;
-                        return '<button class="player-btn coach' + (selectedPlayer && selectedPlayer.letter === c.letter && selectedPlayer.isCoach ? ' selected' : '') + '" onclick="selectCoach(\'' + c.letter + '\'); renderStats();">' +
-                            '<div style="font-size: 14px; font-weight: bold;">' + c.letter + '</div>' +
-                            '<div style="font-size: 11px; font-weight: 600;">' + coachName + '</div>' +
-                            '<div style="font-size: 10px;">🟡 ' + (c.yellowCard || 0) + ' ⏱️ ' + (c.twoMinute || 0) + ' 🔴 ' + (c.redCard || 0) + '</div></button>';
-                    }).join('') +
-                    '</div></div>';
-            }
-
             if (selectedPlayer && (selectedPlayer.isGoalkeeper || selectedPlayer.is_goalkeeper)) {
                 html += '<div class="card"><div class="card-title">📊 ' + selectedPlayer.name + '</div>' +
                     '<div style="margin-bottom: 1.5rem;"><div style="font-size: 12px; font-weight: 600; color: #639922; margin-bottom: 0.75rem;">Abwehr / Paraden</div>' +
@@ -1279,7 +1264,7 @@
                     '</div>';
             }
 
-            // BETREUER STATS
+            // BETREUER STATS (für ausgewählten Betreuer)
             if (selectedPlayer && selectedPlayer.isCoach) {
                 html += '<div class="card"><div class="card-title">📊 Betreuer ' + selectedPlayer.letter + '</div>' +
                     '<div class="stat-buttons">' +
@@ -1289,7 +1274,23 @@
                     '</div></div>';
             }
 
+            // Betreuer VOR den Action-Buttons
+            if (currentGame.coaches && currentGame.coaches.length > 0) {
+                html += '<div class="card"><div class="card-title">👔 Betreuer</div><div class="player-grid">' +
+                    currentGame.coaches.map(c => {
+                        const coachData = coaches.find(coach => coach.letter === c.letter);
+                        const coachName = coachData ? coachData.name : 'Betreuer ' + c.letter;
+                        return '<button class="player-btn coach' + (selectedPlayer && selectedPlayer.letter === c.letter && selectedPlayer.isCoach ? ' selected' : '') + '" onclick="selectCoach(\'' + c.letter + '\'); renderStats();">' +
+                            '<div style="font-size: 14px; font-weight: bold;">' + c.letter + '</div>' +
+                            '<div style="font-size: 11px; font-weight: 600;">' + coachName + '</div>' +
+                            '<div style="font-size: 10px;">🟡 ' + (c.yellowCard || 0) + ' ⏱️ ' + (c.twoMinute || 0) + ' 🔴 ' + (c.redCard || 0) + '</div></button>';
+                    }).join('') +
+                    '</div></div>';
+            }
+
+            // Action-Buttons ganz am Ende
             html += '<div style="display: flex; gap: 1rem; margin-top: 2rem; flex-wrap: wrap;"><button class="btn btn-success" onclick="saveCurrentGame(); showToast(\'Gespeichert!\');" style="flex: 1; min-width: 120px;">💾 Speichern</button><button class="btn btn-primary" onclick="exportToPDF();" style="flex: 1; min-width: 120px;">📄 PDF</button><button class="btn btn-warning" onclick="finishGame();" style="flex: 1; min-width: 120px;">🏁 Beenden</button><button class="btn btn-info" onclick="openAddPlayerModal();" style="flex: 1; min-width: 120px;">➕ Spieler hinzufügen</button></div>';
+            
             container.innerHTML = html;
         }
 
@@ -1815,6 +1816,11 @@
                     firstHalf: 0,
                     secondHalf: 0
                 },
+                opponentTimeouts: {
+                    total: 0,
+                    firstHalf: 0,
+                    secondHalf: 0
+                },
                 ownGoals: 0,
                 opponentGoals: 0,
                 startTime: null,
@@ -1853,6 +1859,7 @@
                         players: newGame.players,
                         coaches: newGame.coaches || [],
                         timeouts: newGame.timeouts || { total: 0, firstHalf: 0, secondHalf: 0 },
+                        opponent_timeouts: newGame.opponentTimeouts || { total: 0, firstHalf: 0, secondHalf: 0 },
                         own_goals: newGame.ownGoals,
                         opponent_goals: newGame.opponentGoals,
                         start_time: newGame.startTime,
@@ -2047,6 +2054,7 @@
                         players: game.players,
                         coaches: game.coaches || [],
                         timeouts: game.timeouts || { total: 0, firstHalf: 0, secondHalf: 0 },
+                        opponent_timeouts: game.opponentTimeouts || { total: 0, firstHalf: 0, secondHalf: 0 },
                         own_goals: game.ownGoals,
                         opponent_goals: game.opponentGoals,
                         start_time: game.startTime,
@@ -2159,6 +2167,7 @@
                         players: currentGame.players,
                         coaches: currentGame.coaches || [],
                         timeouts: currentGame.timeouts || { total: 0, firstHalf: 0, secondHalf: 0 },
+                        opponent_timeouts: currentGame.opponentTimeouts || { total: 0, firstHalf: 0, secondHalf: 0 },
                         own_goals: currentGame.ownGoals,
                         opponent_goals: currentGame.opponentGoals,
                         start_time: currentGame.startTime,
@@ -2383,6 +2392,32 @@
             saveCurrentGame();
             renderStats();
             showToast('⏸️ Team Timeout erfasst! (' + currentGame.timeouts.total + '/' + MAX_TIMEOUTS_TOTAL + ')');
+        }
+
+        function addOpponentTimeout() {
+            if (!currentGame || !currentGame.opponentTimeouts) {
+                currentGame.opponentTimeouts = { total: 0, firstHalf: 0, secondHalf: 0 };
+            }
+            
+            if (currentGame.opponentTimeouts.total >= MAX_TIMEOUTS_TOTAL) {
+                showToast('❌ Gegner: Max Timeouts erreicht!');
+                return;
+            }
+            
+            const elapsed = getElapsedSeconds();
+            const isSecondHalf = elapsed >= 1800;
+            const currentHalf = isSecondHalf ? 'secondHalf' : 'firstHalf';
+            
+            if (currentGame.opponentTimeouts[currentHalf] >= MAX_TIMEOUTS_HALFTIME) {
+                showToast('❌ Gegner: Max ' + MAX_TIMEOUTS_HALFTIME + ' Timeouts pro Halbzeit!');
+                return;
+            }
+            
+            currentGame.opponentTimeouts.total++;
+            currentGame.opponentTimeouts[currentHalf]++;
+            saveCurrentGame();
+            renderStats();
+            showToast('ℹ️ Gegner Timeout erfasst! (' + currentGame.opponentTimeouts.total + '/' + MAX_TIMEOUTS_TOTAL + ')');
         }
 
         // =====================================================

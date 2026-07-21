@@ -592,6 +592,53 @@
         }
 
         // =====================================================
+        // KEYBOARD SHORTCUTS - ENTER-TASTE UNTERSTÜTZUNG
+        // =====================================================
+        // Enter-Taste aktiviert Login
+        document.getElementById('loginEmail')?.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                handleLogin();
+            }
+        });
+
+        document.getElementById('loginPassword')?.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                handleLogin();
+            }
+        });
+
+        // Enter-Taste aktiviert Signup
+        document.getElementById('signupName')?.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                handleSignup();
+            }
+        });
+
+        document.getElementById('signupEmail')?.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                handleSignup();
+            }
+        });
+
+        document.getElementById('signupPassword')?.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                handleSignup();
+            }
+        });
+
+        document.getElementById('signupPasswordConfirm')?.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                handleSignup();
+            }
+        });
+
+        // =====================================================
         // DATA LOADING
         // =====================================================
         async function loadData() {
@@ -1517,18 +1564,31 @@
             selectionMode = mode;
             const isField = mode === 'field';
             
-            // Filter players by goalkeeper status - use is_goalkeeper field
-            const availablePlayers = players.filter(p => {
-                const isGK = p.is_goalkeeper === true || p.isGoalkeeper === true; // Strictly check for true
-                console.log('Player', p.id, 'is_goalkeeper:', p.is_goalkeeper, 'isGoalkeeper:', p.isGoalkeeper, 'isGK:', isGK);
-                if (isField) {
-                    return !isGK; // Fielded players
-                } else {
-                    return isGK; // Goalkeepers only
-                }
-            });
+            // Guard: Spieler-Array valide?
+            if (!Array.isArray(players)) {
+                console.error('❌ openPlayerSelectionModal: players ist keine Array');
+                showToast('⚠️ Fehler beim Laden der Spieler');
+                return;
+            }
             
-            console.log('Available players for', mode, ':', availablePlayers.length, availablePlayers);
+            // DEBUG: Zeige erste 3 Spieler
+            console.log('📋 First 3 players:', players.slice(0, 3));
+            
+            // Filter players by goalkeeper status
+            const availablePlayers = players
+                .filter(p => {
+                    // Valide Spieler? (ID oder mindestens Nummer)
+                    if (!p?.id && p?.number === undefined) {
+                        console.warn('⚠️ Spieler ohne ID und Number:', p);
+                        return false;
+                    }
+                    const isGK = p.is_goalkeeper === true || p.isGoalkeeper === true;
+                    return isField ? !isGK : isGK;
+                })
+                // Sortiere aufsteigend nach Nummer
+                .sort((a, b) => (a.number || 0) - (b.number || 0));
+            
+            console.log('✅ Available players for', mode, ':', availablePlayers.length);
 
             if (availablePlayers.length === 0) {
                 showToast('Keine ' + (isField ? 'Feldspieler' : 'Torwarte') + ' vorhanden!');
@@ -1539,9 +1599,12 @@
 
             let html = '';
             availablePlayers.forEach(p => {
+                // Verwende Number/Name mit sicheren Fallbacks
+                const playerNum = p.number || '?';
+                const playerName = p.name || 'Unbekannt';
                 html += `<label class="checkbox-item">
                     <input type="checkbox" value="${p.id}" onchange="updateSelectedCount()">
-                    <span>#${p.number} ${p.name}</span>
+                    <span>#${playerNum} ${playerName}</span>
                 </label>`;
             });
 
@@ -1717,21 +1780,81 @@
         }
 
         function selectGame(gameId) {
+            // Guard Clause 1: Valide Spiel-ID?
+            if (!gameId || typeof gameId !== 'string') {
+                console.error('❌ selectGame: Ungültige Spiel-ID');
+                showToast('⚠️ Fehler: Spiel konnte nicht geladen werden');
+                return false;
+            }
+            
+            // Guard Clause 2: Games-Array valide?
+            if (!Array.isArray(games)) {
+                console.error('❌ selectGame: games ist keine Array');
+                showToast('⚠️ Fehler: Spielliste nicht geladen');
+                return false;
+            }
+            
+            // Spiel suchen
+            const game = games.find(g => g?.id === gameId);
+            
+            // Guard Clause 3: Spiel nicht gefunden?
+            if (!game) {
+                console.error('❌ selectGame: Spiel #' + gameId + ' nicht gefunden');
+                showToast('⚠️ Spiel nicht gefunden');
+                return false;
+            }
+            
+            // Timer stoppen
             stopTimer();
-            currentGame = games.find(g => g.id === gameId);
+            
+            // Spiel setzen
+            currentGame = game;
             selectedPlayer = null;
-            document.querySelector('[onclick="switchTab(\'stats\')"]').click();
+            console.log('✅ Spiel geladen: ' + game.opponent);
+            
+            // Tab wechseln - mit Fallback
+            const statsTabButton = document.querySelector('[onclick="switchTab(\'stats\')"]');
+            if (statsTabButton) {
+                statsTabButton.click();
+            } else {
+                console.warn('⚠️ Stats-Button nicht gefunden, manueller Tab-Switch nötig');
+            }
+            
+            return true;
         }
 
         function selectPlayerFromGame(playerId) {
-            if (!currentGame) return;
-            const player = currentGame.players.find(x => x.id === playerId);
-            if (!player) {
-                console.error('Player not found:', playerId);
-                return;
+            // Guard Clause 1: Kein Spiel aktiv
+            if (!currentGame) {
+                console.warn('⚠️ selectPlayerFromGame: Kein Spiel aktiv');
+                return false;
             }
+            
+            // Guard Clause 2: Keine Spieler-ID
+            if (!playerId) {
+                console.warn('⚠️ selectPlayerFromGame: Keine Spieler-ID übergeben');
+                return false;
+            }
+            
+            // Guard Clause 3: Spieler-Array nicht valide
+            if (!Array.isArray(currentGame.players)) {
+                console.error('❌ selectPlayerFromGame: currentGame.players ist keine Array');
+                return false;
+            }
+            
+            // Spieler suchen (auch null-safe mit optional chaining)
+            const player = currentGame.players.find(x => x?.id === playerId);
+            
+            // Guard Clause 4: Spieler nicht gefunden
+            if (!player) {
+                console.error('❌ selectPlayerFromGame: Spieler #' + playerId + ' nicht gefunden');
+                return false;
+            }
+            
+            // Alles OK - Spieler setzen
             selectedPlayer = player;
-            console.log('Selected player:', selectedPlayer);
+            console.log('✅ Spieler ausgewählt: #' + player.number + ' ' + (player.name || 'Unbekannt'));
+            return true;
         }
 
         async function deleteGame(gameId) {

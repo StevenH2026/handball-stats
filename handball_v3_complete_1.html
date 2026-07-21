@@ -2390,9 +2390,8 @@
             currentGame.timeouts.total++;
             currentGame.timeouts[currentHalf]++;
             
-            // ✅ Timer pausieren - speichere aktuelle Sekunde
-            currentGame.pausedSeconds = elapsed;
-            currentGame.pausedAtMs = Date.now();
+            // ✅ Timer pausieren - speichere Millisekunden (exakt!)
+            currentGame.pausedMs = (Date.now() - currentGame.startTime) - (currentGame.totalPausedMs || 0);
             stopTimer();
             
             saveCurrentGame();
@@ -2422,9 +2421,8 @@
             currentGame.opponentTimeouts.total++;
             currentGame.opponentTimeouts[currentHalf]++;
             
-            // ✅ Timer pausieren - speichere aktuelle Sekunde
-            currentGame.pausedSeconds = elapsed;
-            currentGame.pausedAtMs = Date.now();
+            // ✅ Timer pausieren - speichere Millisekunden (exakt!)
+            currentGame.pausedMs = (Date.now() - currentGame.startTime) - (currentGame.totalPausedMs || 0);
             stopTimer();
             
             saveCurrentGame();
@@ -2499,10 +2497,9 @@
             if (!currentGame) return;
             
             if (timerInterval) {
-                // PAUSE - Speichere nur die aktuelle Sekunde
-                currentGame.pausedSeconds = getElapsedSeconds();
-                currentGame.pausedAtMs = Date.now();
-                console.log('⏸️ Timer paused at: ' + currentGame.pausedSeconds + 's');
+                // PAUSE - Speichere die Millisekunden-Zeit, nicht gerundete Sekunden!
+                currentGame.pausedMs = (Date.now() - currentGame.startTime) - (currentGame.totalPausedMs || 0);
+                console.log('⏸️ Timer paused at: ' + Math.floor(currentGame.pausedMs / 1000) + 's');
                 stopTimer();
             } else {
                 // RESUME
@@ -2511,15 +2508,15 @@
                     currentGame.startTime = Date.now();
                     currentGame.totalPausedMs = 0;
                     console.log('▶️ Timer started');
-                } else if (currentGame.pausedAtMs) {
+                } else if (currentGame.pausedMs !== null && currentGame.pausedMs !== undefined) {
                     // Nach Pause: Berechne wie lange pausiert wurde
-                    const pausedForMs = Date.now() - currentGame.pausedAtMs;
+                    const currentMs = (Date.now() - currentGame.startTime) - (currentGame.totalPausedMs || 0);
+                    const pausedForMs = currentMs - currentGame.pausedMs;
                     currentGame.totalPausedMs += pausedForMs;
                     console.log('▶️ Timer resumed | Paused for: ' + pausedForMs + 'ms | Total paused: ' + currentGame.totalPausedMs + 'ms');
                 }
                 
-                currentGame.pausedSeconds = null;
-                currentGame.pausedAtMs = null;
+                currentGame.pausedMs = null;
                 startTimer();
             }
             saveCurrentGame();
@@ -2527,10 +2524,9 @@
         }
 
         function getElapsedSeconds() {
-            // Wenn pausiert: Zeige die gespeicherte Sekunde an (unverändert!)
-            // WICHTIG: Überprüfe BEIDE - pausedAtMs UND pausedSeconds!
-            if (currentGame && currentGame.pausedAtMs && currentGame.pausedSeconds !== null && currentGame.pausedSeconds !== undefined) {
-                return currentGame.pausedSeconds;
+            // Wenn pausiert: Zeige die gespeicherte Millisekunden-Zeit an (exakt!)
+            if (currentGame && currentGame.pausedMs !== null && currentGame.pausedMs !== undefined) {
+                return Math.floor(currentGame.pausedMs / 1000);
             }
             
             if (!currentGame || !currentGame.startTime) return 0;

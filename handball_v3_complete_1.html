@@ -621,6 +621,18 @@
                         if (player) {
                             player[action.stat] = action.oldValue;
                             
+                            // WICHTIG: Berechne Gesamttore neu, wenn Tor rückgängig gemacht wurde
+                            if (action.stat === 'goals' || action.stat === 'goals7m') {
+                                currentGame.ownGoals = currentGame.players.reduce((s, pl) => s + (pl.goals || 0) + (pl.goals7m || 0), 0);
+                                console.log(`↶ Undo: Eigene Tore neu berechnet: ${currentGame.ownGoals}`);
+                            }
+                            
+                            // Berechne Gegentore neu, wenn Gegentreffer rückgängig gemacht wurde (für Torwart)
+                            if (action.stat === 'conceded' || action.stat === 'conceded7m') {
+                                currentGame.opponentGoals = currentGame.players.reduce((s, pl) => s + (pl.conceded || 0) + (pl.conceded7m || 0), 0);
+                                console.log(`↶ Undo: Gegentore neu berechnet: ${currentGame.opponentGoals}`);
+                            }
+                            
                             // Stat-Labels für bessere Meldungen
                             const statLabel = {
                                 'goals': 'Tor',

@@ -2499,11 +2499,12 @@
             if (!currentGame) return;
             
             if (timerInterval) {
-                // PAUSE - Speichere ECHTE Realzeit UND Display-Sekunden
-                currentGame.pausedDisplaySeconds = Math.floor(getElapsedSeconds());  // z.B. 10
-                currentGame.pausedAtRealTime = Date.now();  // echte Zeit
-                console.log('⏸️ Timer paused at: ' + currentGame.pausedDisplaySeconds + 's');
+                // PAUSE - Speichere ECHTE Realzeit UND Display-Sekunden (mit Dezimalstellen für Genauigkeit)
+                currentGame.pausedDisplaySeconds = getElapsedSeconds();
+                currentGame.pausedAtRealTime = Date.now();
+                console.log('⏸️ Timer paused at: ' + currentGame.pausedDisplaySeconds.toFixed(2) + 's');
                 stopTimer();
+                updateTimerDisplay();
             } else {
                 // RESUME
                 if (!currentGame.startTime) {
@@ -2523,11 +2524,10 @@
                 startTimer();
             }
             saveCurrentGame();
-            renderStats();
         }
 
         function getElapsedSeconds() {
-            // Wenn pausiert: Zeige die gespeicherten Display-Sekunden an (unverändert!)
+            // Wenn pausiert: Zeige die gespeicherten Display-Sekunden an (exakt!)
             if (currentGame && currentGame.pausedDisplaySeconds !== null && currentGame.pausedDisplaySeconds !== undefined) {
                 return currentGame.pausedDisplaySeconds;
             }
@@ -2538,24 +2538,56 @@
             const totalElapsed = now - currentGame.startTime;
             const totalPaused = currentGame.totalPausedMs || 0;
             
-            return Math.floor((totalElapsed - totalPaused) / 1000);
+            return (totalElapsed - totalPaused) / 1000;
+        }
+
+        function updateTimerDisplay() {
+            if (!currentGame) return;
+            
+            const elapsed = getElapsedSeconds();
+            const timerEl = document.querySelector('.timer');
+            const isHalftime = elapsed >= 1800;
+            
+            if (timerEl) {
+                timerEl.innerHTML = formatTime(elapsed) + (isHalftime ? ' <span class="halftime-badge">HALBZEIT</span>' : '');
+            }
+            
+            // Update Play/Pause Button Status
+            const isRunning = timerInterval !== null;
+            const timerBtn = document.querySelector('.timer-buttons button');
+            if (timerBtn) {
+                timerBtn.className = 'btn ' + (isRunning ? 'btn-warning' : 'btn-success');
+                timerBtn.textContent = (isRunning ? '⏸️ Pause' : '▶️ Start');
+            }
         }
 
         function startTimer() {
             if (timerInterval || !currentGame) return;
-            timerInterval = setInterval(() => renderStats(), 1000);
+            
+            // requestAnimationFrame für flüssige 60fps Updates des Timers
+            const animate = () => {
+                if (!currentGame) return;
+                updateTimerDisplay();
+                timerInterval = requestAnimationFrame(animate);
+            };
+            
+            timerInterval = requestAnimationFrame(animate);
         }
 
         function stopTimer() {
             if (timerInterval) {
-                clearInterval(timerInterval);
+                if (typeof timerInterval === 'number') {
+                    cancelAnimationFrame(timerInterval);
+                } else {
+                    clearInterval(timerInterval);
+                }
                 timerInterval = null;
             }
         }
 
         function formatTime(seconds) {
             const mins = Math.floor(seconds / 60);
-            const secs = seconds % 60;
+            const secs = Math.floor(seconds % 60);
             return (mins < 10 ? '0' : '') + mins + ':' + (secs < 10 ? '0' : '') + secs;
         }
 

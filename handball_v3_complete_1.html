@@ -2390,10 +2390,15 @@
             currentGame.timeouts.total++;
             currentGame.timeouts[currentHalf]++;
             
-            // ✅ Timer pausieren - speichere Display-Sekunden UND echte Realzeit
-            currentGame.pausedDisplaySeconds = elapsed;
-            currentGame.pausedAtRealTime = Date.now();
-            stopTimer();
+            // ✅ Timer pausieren wie bei Pause
+            if (timerInterval) {
+                const now = Date.now();
+                const elapsedAtPause = now - currentGame.startTime - (currentGame.pausedDurationMs || 0);
+                currentGame.pauseTime = now;
+                currentGame.pauseElapsedMs = elapsedAtPause;
+                stopTimer();
+                updateTimerDisplay();
+            }
             
             saveCurrentGame();
             renderStats();
@@ -2422,10 +2427,15 @@
             currentGame.opponentTimeouts.total++;
             currentGame.opponentTimeouts[currentHalf]++;
             
-            // ✅ Timer pausieren - speichere Display-Sekunden UND echte Realzeit
-            currentGame.pausedDisplaySeconds = elapsed;
-            currentGame.pausedAtRealTime = Date.now();
-            stopTimer();
+            // ✅ Timer pausieren wie bei Pause
+            if (timerInterval) {
+                const now = Date.now();
+                const elapsedAtPause = now - currentGame.startTime - (currentGame.pausedDurationMs || 0);
+                currentGame.pauseTime = now;
+                currentGame.pauseElapsedMs = elapsedAtPause;
+                stopTimer();
+                updateTimerDisplay();
+            }
             
             saveCurrentGame();
             renderStats();
@@ -2499,10 +2509,12 @@
             if (!currentGame) return;
             
             if (timerInterval) {
-                // PAUSE - Speichere ECHTE Realzeit UND Display-Sekunden (mit Dezimalstellen für Genauigkeit)
-                currentGame.pausedDisplaySeconds = getElapsedSeconds();
-                currentGame.pausedAtRealTime = Date.now();
-                console.log('⏸️ Timer paused at: ' + currentGame.pausedDisplaySeconds.toFixed(2) + 's');
+                // PAUSE - Speichere JETZT als Pause-Zeitpunkt
+                const now = Date.now();
+                const elapsedAtPause = now - currentGame.startTime - (currentGame.pausedDurationMs || 0);
+                currentGame.pauseTime = now;  // Zeitpunkt der Pause
+                currentGame.pauseElapsedMs = elapsedAtPause;  // Wie viele ms sind seit Start vergangen?
+                console.log('⏸️ Timer paused at: ' + (elapsedAtPause / 1000).toFixed(2) + 's');
                 stopTimer();
                 updateTimerDisplay();
             } else {
@@ -2510,33 +2522,34 @@
                 if (!currentGame.startTime) {
                     // Erstes Mal starten
                     currentGame.startTime = Date.now();
-                    currentGame.totalPausedMs = 0;
-                    console.log('▶️ Timer started');
-                } else if (currentGame.pausedAtRealTime) {
-                    // Nach Pause: Berechne wie LANGE echte Zeit pausiert wurde
-                    const pausedForMs = Date.now() - currentGame.pausedAtRealTime;
-                    currentGame.totalPausedMs += pausedForMs;
-                    console.log('▶️ Timer resumed | Paused for: ' + pausedForMs + 'ms | Total paused: ' + currentGame.totalPausedMs + 'ms');
+                    currentGame.pausedDurationMs = 0;
+                    console.log('▶️ Timer started fresh');
+                } else if (currentGame.pauseTime) {
+                    // Nach Pause: Addiere die Pause-Dauer zur pausedDurationMs
+                    const pausedForMs = Date.now() - currentGame.pauseTime;
+                    currentGame.pausedDurationMs = (currentGame.pausedDurationMs || 0) + pausedForMs;
+                    console.log('▶️ Timer resumed | Paused for: ' + pausedForMs + 'ms | Total paused: ' + currentGame.pausedDurationMs + 'ms');
+                    currentGame.pauseTime = null;
+                    currentGame.pauseElapsedMs = null;
                 }
-                
-                currentGame.pausedDisplaySeconds = null;
-                currentGame.pausedAtRealTime = null;
                 startTimer();
             }
             saveCurrentGame();
         }
 
         function getElapsedSeconds() {
-            // Wenn pausiert: Zeige die gespeicherten Display-Sekunden an (exakt!)
-            if (currentGame && currentGame.pausedDisplaySeconds !== null && currentGame.pausedDisplaySeconds !== undefined) {
-                return currentGame.pausedDisplaySeconds;
-            }
-            
             if (!currentGame || !currentGame.startTime) return 0;
             
+            // Wenn gerade pausiert (pauseTime gespeichert UND Timer nicht laufen)
+            if (currentGame.pauseTime && timerInterval === null) {
+                // Gib die Sekunden zurück, die beim Pausieren verstrichenen waren
+                return currentGame.pauseElapsedMs / 1000;
+            }
+            
+            // Normale Berechnung: (jetzt - start) - pausedDuration
             const now = Date.now();
             const totalElapsed = now - currentGame.startTime;
-            const totalPaused = currentGame.totalPausedMs || 0;
+            const totalPaused = currentGame.pausedDurationMs || 0;
             
             return (totalElapsed - totalPaused) / 1000;
         }
@@ -2566,7 +2579,6 @@
             
             // requestAnimationFrame für flüssige 60fps Updates des Timers
             const animate = () => {
-                if (!currentGame) return;
                 updateTimerDisplay();
                 timerInterval = requestAnimationFrame(animate);
             };
@@ -2576,11 +2588,7 @@
 
         function stopTimer() {
             if (timerInterval) {
-                if (typeof timerInterval === 'number') {
-                    cancelAnimationFrame(timerInterval);
-                } else {
-                    clearInterval(timerInterval);
-                }
+                cancelAnimationFrame(timerInterval);
                 timerInterval = null;
             }
         }

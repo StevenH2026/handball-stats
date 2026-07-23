@@ -2422,7 +2422,17 @@
         // =====================================================
         // TIMER
         // =====================================================
-        // Timer entfernt - Spielzeit-Funktionalität wird nicht benötigt
+        // Timer-Funktionen (entfernt aber als Platzhalter)
+        function toggleTimer() {}
+        function getElapsedSeconds() { return 0; }
+        function updateTimerDisplay() {}
+        function startTimer() {}
+        function stopTimer() {}
+        function formatTime(seconds) {
+            const mins = Math.floor(seconds / 60);
+            const secs = Math.floor(seconds % 60);
+            return (mins < 10 ? '0' : '') + mins + ':' + (secs < 10 ? '0' : '') + secs;
+        }
 
         function formatTime(seconds) {
             const mins = Math.floor(seconds / 60);

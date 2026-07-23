@@ -2390,14 +2390,10 @@
             currentGame.timeouts.total++;
             currentGame.timeouts[currentHalf]++;
             
-            // ✅ Timer pausieren wie bei Pause
-            if (timerInterval) {
-                const now = Date.now();
-                const elapsedAtPause = now - currentGame.startTime - (currentGame.pausedDurationMs || 0);
-                currentGame.pauseTime = now;
-                currentGame.pauseElapsedMs = elapsedAtPause;
+            // ✅ Timer pausieren wie Pause-Button
+            if (timerInterval !== null) {
+                currentGame.pausedAtMs = Date.now();
                 stopTimer();
-                updateTimerDisplay();
             }
             
             saveCurrentGame();
@@ -2427,14 +2423,10 @@
             currentGame.opponentTimeouts.total++;
             currentGame.opponentTimeouts[currentHalf]++;
             
-            // ✅ Timer pausieren wie bei Pause
-            if (timerInterval) {
-                const now = Date.now();
-                const elapsedAtPause = now - currentGame.startTime - (currentGame.pausedDurationMs || 0);
-                currentGame.pauseTime = now;
-                currentGame.pauseElapsedMs = elapsedAtPause;
+            // ✅ Timer pausieren wie Pause-Button
+            if (timerInterval !== null) {
+                currentGame.pausedAtMs = Date.now();
                 stopTimer();
-                updateTimerDisplay();
             }
             
             saveCurrentGame();
@@ -2509,28 +2501,25 @@
             if (!currentGame) return;
             
             if (timerInterval) {
-                // PAUSE - Speichere JETZT als Pause-Zeitpunkt
-                const now = Date.now();
-                const elapsedAtPause = now - currentGame.startTime - (currentGame.pausedDurationMs || 0);
-                currentGame.pauseTime = now;  // Zeitpunkt der Pause
-                currentGame.pauseElapsedMs = elapsedAtPause;  // Wie viele ms sind seit Start vergangen?
-                console.log('⏸️ Timer paused at: ' + (elapsedAtPause / 1000).toFixed(2) + 's');
+                // PAUSE - Speichere JETZT
+                currentGame.pausedAtMs = Date.now();
+                console.log('⏸️ Timer paused');
                 stopTimer();
-                updateTimerDisplay();
             } else {
-                // RESUME
-                if (!currentGame.startTime) {
+                // RESUME oder START
+                const now = Date.now();
+                
+                if (!currentGame.startTimeMs) {
                     // Erstes Mal starten
-                    currentGame.startTime = Date.now();
-                    currentGame.pausedDurationMs = 0;
-                    console.log('▶️ Timer started fresh');
-                } else if (currentGame.pauseTime) {
-                    // Nach Pause: Addiere die Pause-Dauer zur pausedDurationMs
-                    const pausedForMs = Date.now() - currentGame.pauseTime;
-                    currentGame.pausedDurationMs = (currentGame.pausedDurationMs || 0) + pausedForMs;
-                    console.log('▶️ Timer resumed | Paused for: ' + pausedForMs + 'ms | Total paused: ' + currentGame.pausedDurationMs + 'ms');
-                    currentGame.pauseTime = null;
-                    currentGame.pauseElapsedMs = null;
+                    currentGame.startTimeMs = now;
+                    currentGame.totalPausedMs = 0;
+                    console.log('▶️ Timer started');
+                } else if (currentGame.pausedAtMs) {
+                    // Nach Pause: Addiere die Pause-Zeit
+                    const pausedForMs = now - currentGame.pausedAtMs;
+                    currentGame.totalPausedMs += pausedForMs;
+                    currentGame.pausedAtMs = null;
+                    console.log('▶️ Timer resumed | Paused for: ' + pausedForMs + 'ms | Total paused: ' + currentGame.totalPausedMs + 'ms');
                 }
                 startTimer();
             }
@@ -2538,19 +2527,19 @@
         }
 
         function getElapsedSeconds() {
-            if (!currentGame || !currentGame.startTime) return 0;
+            if (!currentGame || !currentGame.startTimeMs) return 0;
             
-            // Wenn gerade pausiert (pauseTime gespeichert UND Timer nicht laufen)
-            if (currentGame.pauseTime && timerInterval === null) {
-                // Gib die Sekunden zurück, die beim Pausieren verstrichenen waren
-                return currentGame.pauseElapsedMs / 1000;
+            // Wenn gerade pausiert
+            if (currentGame.pausedAtMs !== null && currentGame.pausedAtMs !== undefined) {
+                // Berechne was zum Zeitpunkt der Pause vergangen war
+                const elapsedAtPause = (currentGame.pausedAtMs - currentGame.startTimeMs) - (currentGame.totalPausedMs || 0);
+                return elapsedAtPause / 1000;
             }
             
-            // Normale Berechnung: (jetzt - start) - pausedDuration
+            // Laufend: berechne aktuelle verstrichene Zeit
             const now = Date.now();
-            const totalElapsed = now - currentGame.startTime;
-            const totalPaused = currentGame.pausedDurationMs || 0;
-            
+            const totalElapsed = now - currentGame.startTimeMs;
+            const totalPaused = currentGame.totalPausedMs || 0;
             return (totalElapsed - totalPaused) / 1000;
         }
 
@@ -2565,7 +2554,6 @@
                 timerEl.innerHTML = formatTime(elapsed) + (isHalftime ? ' <span class="halftime-badge">HALBZEIT</span>' : '');
             }
             
-            // Update Play/Pause Button Status
             const isRunning = timerInterval !== null;
             const timerBtn = document.querySelector('.timer-buttons button');
             if (timerBtn) {
@@ -2575,22 +2563,20 @@
         }
 
         function startTimer() {
-            if (timerInterval || !currentGame) return;
+            if (timerInterval !== null) return;
             
-            // requestAnimationFrame für flüssige 60fps Updates des Timers
-            const animate = () => {
+            // Einfacher setInterval statt requestAnimationFrame
+            timerInterval = setInterval(() => {
                 updateTimerDisplay();
-                timerInterval = requestAnimationFrame(animate);
-            };
-            
-            timerInterval = requestAnimationFrame(animate);
+            }, 100);  // Update alle 100ms
         }
 
         function stopTimer() {
-            if (timerInterval) {
-                cancelAnimationFrame(timerInterval);
+            if (timerInterval !== null) {
+                clearInterval(timerInterval);
                 timerInterval = null;
             }
+            updateTimerDisplay();
         }
 
         function formatTime(seconds) {
